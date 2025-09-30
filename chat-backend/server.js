@@ -1,5 +1,6 @@
 // server.js
-require("dotenv").config(); // Load environment variables
+require("dotenv").config(); // Load .env first
+
 const express = require("express");
 const cors = require("cors");
 const WebSocket = require("ws");
@@ -10,35 +11,37 @@ const { v4: uuidv4 } = require("uuid");
 
 const app = express();
 app.use(cors());
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve uploaded images
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Use dynamic port for Render
+// Dynamic port for Render
 const PORT = process.env.PORT || 5050;
 const server = app.listen(PORT, () =>
   console.log(`🚀 Server running on port ${PORT}`)
 );
 
-// Upstash Redis connection
+// --- Upstash Redis connection ---
+if (!process.env.UPSTASH_REDIS_URL || !process.env.UPSTASH_REDIS_TOKEN) {
+  console.error("❌ Redis environment variables missing!");
+  process.exit(1);
+}
+
 const redisOptions = {
   url: process.env.UPSTASH_REDIS_URL,
   password: process.env.UPSTASH_REDIS_TOKEN,
-  // Optional: handle connection retries
   maxRetriesPerRequest: 5,
 };
 
 const redisPub = new Redis(redisOptions);
 const redisSub = new Redis(redisOptions);
 
-// Handle Redis connection errors
 redisPub.on("error", (err) => console.error("❌ Redis Pub Error:", err));
 redisSub.on("error", (err) => console.error("❌ Redis Sub Error:", err));
 
 const CHANNEL = "chatroom";
 const MESSAGE_LIST = "chat_messages";
-
 let activeUsers = new Set();
 
-// Multer config for image upload
+// --- Multer setup ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) =>
@@ -53,28 +56,22 @@ app.post("/upload", upload.single("image"), (req, res) => {
   res.json({ imageUrl });
 });
 
-// WebSocket broadcast helper
+// --- WebSocket server ---
+const wss = new WebSocket.Server({ server });
+
 function broadcast(msg) {
   wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
-    }
+    if (client.readyState === WebSocket.OPEN) client.send(msg);
   });
 }
 
 // Subscribe to Redis channel
 redisSub.subscribe(CHANNEL);
-redisSub.on("message", (channel, message) => {
-  broadcast(message);
-});
-
-// WebSocket server
-const wss = new WebSocket.Server({ server });
+redisSub.on("message", (channel, message) => broadcast(message));
 
 wss.on("connection", async (ws) => {
   console.log("👤 New WebSocket client connected");
 
-  // Send last 50 messages to new client
   try {
     const lastMessages = await redisPub.lrange(MESSAGE_LIST, -50, -1);
     lastMessages.forEach((msg) => ws.send(msg));
