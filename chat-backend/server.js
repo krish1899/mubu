@@ -1,5 +1,5 @@
 // server.js
-require("dotenv").config(); // Load .env first
+require("dotenv").config(); // Load env first
 
 const express = require("express");
 const cors = require("cors");
@@ -13,18 +13,18 @@ const app = express();
 app.use(cors());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Dynamic port for Render
+// --- Dynamic port for Render ---
 const PORT = process.env.PORT || 5050;
-const server = app.listen(PORT, () =>
-  console.log(`🚀 Server running on port ${PORT}`)
-);
+const server = app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
-// --- Upstash Redis connection ---
+// --- Environment check ---
 if (!process.env.UPSTASH_REDIS_URL || !process.env.UPSTASH_REDIS_TOKEN) {
   console.error("❌ Redis environment variables missing!");
   process.exit(1);
 }
+console.log("✅ Redis environment variables loaded");
 
+// --- Upstash Redis connection ---
 const redisOptions = {
   url: process.env.UPSTASH_REDIS_URL,
   password: process.env.UPSTASH_REDIS_TOKEN,
@@ -41,7 +41,8 @@ const CHANNEL = "chatroom";
 const MESSAGE_LIST = "chat_messages";
 let activeUsers = new Set();
 
-// --- Multer setup ---
+// --- Multer for image upload ---
+// ⚠️ NOTE: Render filesystem is ephemeral, uploaded images will disappear on restart
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) =>
