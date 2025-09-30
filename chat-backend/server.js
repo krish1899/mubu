@@ -1,144 +1,52 @@
-// server.js
-require("dotenv").config(); // Load env first
+import express from "express";
+import { Redis } from "@upstash/redis";
+import dotenv from "dotenv";
 
-const express = require("express");
-const cors = require("cors");
-const WebSocket = require("ws");
-const Redis = require("ioredis");
-const multer = require("multer");
-const path = require("path");
-const { v4: uuidv4 } = require("uuid");
+dotenv.config();
 
 const app = express();
-app.use(cors());
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // serve uploads
+app.use(express.json());
 
-// --- Dynamic port for Render ---
-const PORT = process.env.PORT || 5050;
-const server = app.listen(PORT, () =>
-  console.log(`🚀 Server running on port ${PORT}`)
-);
-
-// --- Debug env ---
-console.log("🔹 UPSTASH_REDIS_URL:", process.env.UPSTASH_REDIS_URL ? "✅ set" : "❌ missing");
-console.log("🔹 UPSTASH_REDIS_TOKEN:", process.env.UPSTASH_REDIS_TOKEN ? "✅ set" : "❌ missing");
-
-if (!process.env.UPSTASH_REDIS_URL || !process.env.UPSTASH_REDIS_TOKEN) {
-  console.error("❌ Redis env variables missing! Exiting.");
-  process.exit(1);
-}
-
-// --- Upstash Redis connections (fixed) ---
-const redisPub = new Redis(process.env.UPSTASH_REDIS_URL, {
-  password: process.env.UPSTASH_REDIS_TOKEN,
-  tls: {}, // required for rediss://
-  maxRetriesPerRequest: 5,
+// Create Redis clients
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_URL,
+  token: process.env.UPSTASH_REDIS_TOKEN,
 });
 
-const redisSub = new Redis(process.env.UPSTASH_REDIS_URL, {
-  password: process.env.UPSTASH_REDIS_TOKEN,
-  tls: {},
-  maxRetriesPerRequest: 5,
-});
-
-redisPub.on("connect", () => console.log("✅ Redis Pub connected"));
-redisSub.on("connect", () => console.log("✅ Redis Sub connected"));
-redisPub.on("error", (err) => console.error("❌ Redis Pub Error:", err));
-redisSub.on("error", (err) => console.error("❌ Redis Sub Error:", err));
-
-const CHANNEL = "chatroom";
-const MESSAGE_LIST = "chat_messages";
-let activeUsers = new Set();
-
-// --- Multer config ---
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, `${Date.now()}${path.extname(file.originalname)}`),
-});
-const upload = multer({ storage });
-
-app.post("/upload", upload.single("image"), (req, res) => {
-  const host = req.get("host");
-  const protocol = req.protocol;
-  const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
-  res.json({ imageUrl });
-});
-
-// --- WebSocket server ---
-const wss = new WebSocket.Server({ server });
-
-function broadcast(msg) {
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
-    }
-  });
-}
-
-// Redis subscription
-redisSub.subscribe(CHANNEL);
-redisSub.on("message", (channel, message) => broadcast(message));
-
-wss.on("connection", async (ws) => {
-  console.log("👤 New WebSocket client connected");
-
-  // send last 50 messages
+// Publisher endpoint
+app.post("/publish", async (req, res) => {
+  const { channel, message } = req.body;
   try {
-    const lastMessages = await redisPub.lrange(MESSAGE_LIST, -50, -1);
-    lastMessages.forEach((msg) => ws.send(msg));
+    await redis.publish(channel, message);
+    res.json({ success: true, message: "Message published" });
   } catch (err) {
-    console.error("❌ Failed to fetch last messages:", err);
+    console.error("Publish error:", err);
+    res.status(500).json({ error: "Publish failed" });
   }
+});
 
-  ws.on("message", async (raw) => {
-    try {
-      const parsed = JSON.parse(raw);
+// Subscriber endpoint
+// (you don’t need a long-lived socket — Upstash will call your handler per message)
+app.get("/subscribe/:channel", async (req, res) => {
+  const channel = req.params.channel;
 
-      if (parsed.type === "login") {
-        ws.username = parsed.username;
-        activeUsers.add(parsed.username);
-        broadcast(JSON.stringify({ type: "online", users: [...activeUsers] }));
-        return;
-      }
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.flushHeaders();
 
-      if (parsed.type === "message") {
-        const msgObj = {
-          type: "message",
-          id: uuidv4(),
-          sender: parsed.sender,
-          text: parsed.text,
-          imageUrl: parsed.imageUrl || null,
-          createdAt: parsed.createdAt,
-        };
-        const msgString = JSON.stringify(msgObj);
-        await redisPub.rpush(MESSAGE_LIST, msgString);
-        await redisPub.ltrim(MESSAGE_LIST, -500, -1);
-        redisPub.publish(CHANNEL, msgString);
-        return;
-      }
-
-      if (parsed.type === "delete") {
-        redisPub.publish(CHANNEL, JSON.stringify({ type: "delete", id: parsed.id }));
-        return;
-      }
-
-      if (parsed.type === "typing") {
-        redisPub.publish(CHANNEL, JSON.stringify({ type: "typing", sender: parsed.sender }));
-        return;
-      }
-
-    } catch (err) {
-      console.error("❌ Error parsing WebSocket message:", err);
-    }
+  // Subscribe to channel
+  const sub = redis.subscribe(channel, (msg) => {
+    res.write(`data: ${msg}\n\n`);
   });
 
-  ws.on("close", () => {
-    if (ws.username) {
-      activeUsers.delete(ws.username);
-      broadcast(JSON.stringify({ type: "online", users: [...activeUsers] }));
-      console.log("👋 Disconnected:", ws.username);
-    } else {
-      console.log("👋 Anonymous client disconnected");
-    }
+  req.on("close", async () => {
+    console.log("Closing connection");
+    (await sub).unsubscribe();
+    res.end();
   });
+});
+
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
