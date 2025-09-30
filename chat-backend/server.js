@@ -10,7 +10,7 @@ const { v4: uuidv4 } = require("uuid");
 
 const app = express();
 app.use(cors());
-app.use("/uploads", express.static("uploads")); // Serve uploaded images
+app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve uploaded images
 
 // Use dynamic port for Render
 const PORT = process.env.PORT || 5050;
@@ -18,16 +18,20 @@ const server = app.listen(PORT, () =>
   console.log(`🚀 Server running on port ${PORT}`)
 );
 
-// Upstash Redis
-const redisPub = new Redis({
+// Upstash Redis connection
+const redisOptions = {
   url: process.env.UPSTASH_REDIS_URL,
   password: process.env.UPSTASH_REDIS_TOKEN,
-});
+  // Optional: handle connection retries
+  maxRetriesPerRequest: 5,
+};
 
-const redisSub = new Redis({
-  url: process.env.UPSTASH_REDIS_URL,
-  password: process.env.UPSTASH_REDIS_TOKEN,
-});
+const redisPub = new Redis(redisOptions);
+const redisSub = new Redis(redisOptions);
+
+// Handle Redis connection errors
+redisPub.on("error", (err) => console.error("❌ Redis Pub Error:", err));
+redisSub.on("error", (err) => console.error("❌ Redis Sub Error:", err));
 
 const CHANNEL = "chatroom";
 const MESSAGE_LIST = "chat_messages";
@@ -38,12 +42,14 @@ let activeUsers = new Set();
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) =>
-    cb(null, Date.now() + path.extname(file.originalname)),
+    cb(null, `${Date.now()}${path.extname(file.originalname)}`),
 });
 const upload = multer({ storage });
 
 app.post("/upload", upload.single("image"), (req, res) => {
-  const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  const host = req.get("host");
+  const protocol = req.protocol;
+  const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
   res.json({ imageUrl });
 });
 
@@ -68,9 +74,13 @@ const wss = new WebSocket.Server({ server });
 wss.on("connection", async (ws) => {
   console.log("👤 New WebSocket client connected");
 
-  // Send last 50 messages
-  const lastMessages = await redisPub.lrange(MESSAGE_LIST, -50, -1);
-  lastMessages.forEach((msg) => ws.send(msg));
+  // Send last 50 messages to new client
+  try {
+    const lastMessages = await redisPub.lrange(MESSAGE_LIST, -50, -1);
+    lastMessages.forEach((msg) => ws.send(msg));
+  } catch (err) {
+    console.error("❌ Failed to fetch last messages:", err);
+  }
 
   ws.on("message", async (raw) => {
     try {
@@ -110,7 +120,7 @@ wss.on("connection", async (ws) => {
       }
 
     } catch (err) {
-      console.error("❌ Error parsing message:", err);
+      console.error("❌ Error parsing WebSocket message:", err);
     }
   });
 
