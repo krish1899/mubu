@@ -1,5 +1,5 @@
 // server.js
-require("dotenv").config(); // Load env first
+require("dotenv").config(); // load env first
 
 const express = require("express");
 const cors = require("cors");
@@ -17,22 +17,29 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 const PORT = process.env.PORT || 5050;
 const server = app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
-// --- Environment check ---
+// --- Debug env variables ---
+console.log("🔹 UPSTASH_REDIS_URL:", process.env.UPSTASH_REDIS_URL ? "✅ set" : "❌ missing");
+console.log("🔹 UPSTASH_REDIS_TOKEN:", process.env.UPSTASH_REDIS_TOKEN ? "✅ set" : "❌ missing");
+
+// --- Exit if env missing ---
 if (!process.env.UPSTASH_REDIS_URL || !process.env.UPSTASH_REDIS_TOKEN) {
-  console.error("❌ Redis environment variables missing!");
+  console.error("❌ Redis environment variables missing! Exiting.");
   process.exit(1);
 }
-console.log("✅ Redis environment variables loaded");
 
 // --- Upstash Redis connection ---
 const redisOptions = {
   url: process.env.UPSTASH_REDIS_URL,
   password: process.env.UPSTASH_REDIS_TOKEN,
+  tls: {},                 // required for rediss:// URLs
   maxRetriesPerRequest: 5,
 };
 
 const redisPub = new Redis(redisOptions);
 const redisSub = new Redis(redisOptions);
+
+redisPub.on("connect", () => console.log("✅ Redis Pub connected"));
+redisSub.on("connect", () => console.log("✅ Redis Sub connected"));
 
 redisPub.on("error", (err) => console.error("❌ Redis Pub Error:", err));
 redisSub.on("error", (err) => console.error("❌ Redis Sub Error:", err));
@@ -41,12 +48,10 @@ const CHANNEL = "chatroom";
 const MESSAGE_LIST = "chat_messages";
 let activeUsers = new Set();
 
-// --- Multer for image upload ---
-// ⚠️ NOTE: Render filesystem is ephemeral, uploaded images will disappear on restart
+// --- Multer image upload ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, `${Date.now()}${path.extname(file.originalname)}`),
+  filename: (req, file, cb) => `${Date.now()}${path.extname(file.originalname)}`,
 });
 const upload = multer({ storage });
 
