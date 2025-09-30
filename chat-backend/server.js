@@ -1,3 +1,5 @@
+// server.js
+require("dotenv").config(); // Load environment variables
 const express = require("express");
 const cors = require("cors");
 const WebSocket = require("ws");
@@ -10,14 +12,23 @@ const app = express();
 app.use(cors());
 app.use("/uploads", express.static("uploads")); // Serve uploaded images
 
-const PORT = 5050;
+// Use dynamic port for Render
+const PORT = process.env.PORT || 5050;
 const server = app.listen(PORT, () =>
-  console.log(`🚀 Server running on ${PORT}`)
+  console.log(`🚀 Server running on port ${PORT}`)
 );
 
-const wss = new WebSocket.Server({ server });
-const redisPub = new Redis(6380);
-const redisSub = new Redis(6380);
+// Upstash Redis
+const redisPub = new Redis({
+  url: process.env.UPSTASH_REDIS_URL,
+  password: process.env.UPSTASH_REDIS_TOKEN,
+});
+
+const redisSub = new Redis({
+  url: process.env.UPSTASH_REDIS_URL,
+  password: process.env.UPSTASH_REDIS_TOKEN,
+});
+
 const CHANNEL = "chatroom";
 const MESSAGE_LIST = "chat_messages";
 
@@ -32,10 +43,11 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.post("/upload", upload.single("image"), (req, res) => {
-  const imageUrl = `http://localhost:${PORT}/uploads/${req.file.filename}`;
+  const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
   res.json({ imageUrl });
 });
 
+// WebSocket broadcast helper
 function broadcast(msg) {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
@@ -44,14 +56,19 @@ function broadcast(msg) {
   });
 }
 
+// Subscribe to Redis channel
 redisSub.subscribe(CHANNEL);
 redisSub.on("message", (channel, message) => {
   broadcast(message);
 });
 
+// WebSocket server
+const wss = new WebSocket.Server({ server });
+
 wss.on("connection", async (ws) => {
   console.log("👤 New WebSocket client connected");
 
+  // Send last 50 messages
   const lastMessages = await redisPub.lrange(MESSAGE_LIST, -50, -1);
   lastMessages.forEach((msg) => ws.send(msg));
 
@@ -75,7 +92,6 @@ wss.on("connection", async (ws) => {
           imageUrl: parsed.imageUrl || null,
           createdAt: parsed.createdAt,
         };
-
         const msgString = JSON.stringify(msgObj);
         await redisPub.rpush(MESSAGE_LIST, msgString);
         await redisPub.ltrim(MESSAGE_LIST, -500, -1);
