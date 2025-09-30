@@ -1,5 +1,5 @@
 // server.js
-require("dotenv").config(); // load env first
+require("dotenv").config(); // Load env first
 
 const express = require("express");
 const cors = require("cors");
@@ -11,36 +11,38 @@ const { v4: uuidv4 } = require("uuid");
 
 const app = express();
 app.use(cors());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // serve uploads
 
 // --- Dynamic port for Render ---
 const PORT = process.env.PORT || 5050;
-const server = app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+const server = app.listen(PORT, () =>
+  console.log(`🚀 Server running on port ${PORT}`)
+);
 
-// --- Debug env variables ---
+// --- Debug env ---
 console.log("🔹 UPSTASH_REDIS_URL:", process.env.UPSTASH_REDIS_URL ? "✅ set" : "❌ missing");
 console.log("🔹 UPSTASH_REDIS_TOKEN:", process.env.UPSTASH_REDIS_TOKEN ? "✅ set" : "❌ missing");
 
-// --- Exit if env missing ---
 if (!process.env.UPSTASH_REDIS_URL || !process.env.UPSTASH_REDIS_TOKEN) {
-  console.error("❌ Redis environment variables missing! Exiting.");
+  console.error("❌ Redis env variables missing! Exiting.");
   process.exit(1);
 }
 
-// --- Upstash Redis connection ---
-const redisOptions = {
-  url: process.env.UPSTASH_REDIS_URL,
+// --- Upstash Redis connections (fixed) ---
+const redisPub = new Redis(process.env.UPSTASH_REDIS_URL, {
   password: process.env.UPSTASH_REDIS_TOKEN,
-  tls: {},                 // required for rediss:// URLs
+  tls: {}, // required for rediss://
   maxRetriesPerRequest: 5,
-};
+});
 
-const redisPub = new Redis(redisOptions);
-const redisSub = new Redis(redisOptions);
+const redisSub = new Redis(process.env.UPSTASH_REDIS_URL, {
+  password: process.env.UPSTASH_REDIS_TOKEN,
+  tls: {},
+  maxRetriesPerRequest: 5,
+});
 
 redisPub.on("connect", () => console.log("✅ Redis Pub connected"));
 redisSub.on("connect", () => console.log("✅ Redis Sub connected"));
-
 redisPub.on("error", (err) => console.error("❌ Redis Pub Error:", err));
 redisSub.on("error", (err) => console.error("❌ Redis Sub Error:", err));
 
@@ -48,10 +50,10 @@ const CHANNEL = "chatroom";
 const MESSAGE_LIST = "chat_messages";
 let activeUsers = new Set();
 
-// --- Multer image upload ---
+// --- Multer config ---
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => `${Date.now()}${path.extname(file.originalname)}`,
+  filename: (req, file, cb) => cb(null, `${Date.now()}${path.extname(file.originalname)}`),
 });
 const upload = multer({ storage });
 
@@ -67,17 +69,20 @@ const wss = new WebSocket.Server({ server });
 
 function broadcast(msg) {
   wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) client.send(msg);
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
   });
 }
 
-// Subscribe to Redis channel
+// Redis subscription
 redisSub.subscribe(CHANNEL);
 redisSub.on("message", (channel, message) => broadcast(message));
 
 wss.on("connection", async (ws) => {
   console.log("👤 New WebSocket client connected");
 
+  // send last 50 messages
   try {
     const lastMessages = await redisPub.lrange(MESSAGE_LIST, -50, -1);
     lastMessages.forEach((msg) => ws.send(msg));
