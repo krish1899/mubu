@@ -38,9 +38,13 @@ wss.on("connection", async (ws) => {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -50, -1);
     lastMessages.forEach(msg => {
-      const parsed = JSON.parse(msg);
-      parsed.type = "message"; // ensure type is set
-      ws.send(JSON.stringify(parsed));
+      try {
+        const parsed = JSON.parse(msg);
+        parsed.type = "message"; // ensure type is set
+        ws.send(JSON.stringify(parsed));
+      } catch (err) {
+        console.error("❌ Failed to parse stored message:", msg);
+      }
     });
   } catch (err) {
     console.error("❌ Failed to fetch messages:", err);
@@ -72,13 +76,9 @@ wss.on("connection", async (ws) => {
 
         const msgString = JSON.stringify(msgObj);
 
-        // Broadcast immediately
-        broadcast(msgString);
-
-        // Store in Redis
-        await redis.rpush(MESSAGE_LIST, msgString);
-        await redis.ltrim(MESSAGE_LIST, -500, -1);
-
+        broadcast(msgString); // Send to all clients
+        await redis.rpush(MESSAGE_LIST, msgString); // Store in Redis
+        await redis.ltrim(MESSAGE_LIST, -500, -1); // Keep last 500 messages
         return;
       }
 
