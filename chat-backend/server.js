@@ -13,59 +13,37 @@ const server = app.listen(PORT, () =>
   console.log(`🚀 Server running on port ${PORT}`)
 );
 
-// Upstash Redis client
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_URL,
   token: process.env.UPSTASH_REDIS_TOKEN,
 });
 
-const CHANNEL = "chatroom";
 const MESSAGE_LIST = "chat_messages";
 let activeUsers = new Set();
 
-// WebSocket server
 const wss = new WebSocket.Server({ server });
 
-// Broadcast to all clients
 function broadcast(msg) {
-  wss.clients.forEach((client) => {
+  wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(msg);
     }
   });
 }
 
-// Subscribe to Redis channel
-(async () => {
-  await redis.subscribe(CHANNEL, (message) => {
-    const msgStr = message.toString(); // convert buffer to string
-    console.log("🔔 Redis published message:", msgStr);
-    broadcast(msgStr);
-  });
-})();
-
 wss.on("connection", async (ws) => {
   console.log("👤 New client connected");
 
-  // Send last 50 messages
+  // Send last 50 messages on connection
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -50, -1);
-    lastMessages.forEach((msg) => {
-      let msgStr;
-      if (Buffer.isBuffer(msg)) msgStr = msg.toString();
-      else if (typeof msg === "object") msgStr = JSON.stringify(msg);
-      else msgStr = msg;
-
-      console.log("📤 Sending to client:", msgStr);
-      ws.send(msgStr);
-    });
+    lastMessages.forEach(msg => ws.send(msg.toString()));
   } catch (err) {
     console.error("❌ Failed to fetch messages:", err);
   }
 
   ws.on("message", async (raw) => {
-    const str = raw.toString(); // Convert Buffer to string
-    console.log("📩 Received from client:", str);
+    const str = raw.toString();
 
     try {
       const parsed = JSON.parse(str);
@@ -83,27 +61,28 @@ wss.on("connection", async (ws) => {
           id: uuidv4(),
           sender: parsed.sender,
           text: parsed.text,
-          createdAt: parsed.createdAt || Date.now(),
+          createdAt: Date.now(),
         };
 
         const msgString = JSON.stringify(msgObj);
-        console.log("📡 Publishing message to Redis:", msgString);
 
+        // 1️⃣ Broadcast immediately
+        broadcast(msgString);
+
+        // 2️⃣ Store in Redis after broadcasting
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
-        await redis.publish(CHANNEL, msgString);
+
         return;
       }
 
       if (parsed.type === "delete") {
-        const msgString = JSON.stringify({ type: "delete", id: parsed.id });
-        await redis.publish(CHANNEL, msgString);
+        broadcast(JSON.stringify({ type: "delete", id: parsed.id }));
         return;
       }
 
       if (parsed.type === "typing") {
-        const msgString = JSON.stringify({ type: "typing", sender: parsed.sender });
-        await redis.publish(CHANNEL, msgString);
+        broadcast(JSON.stringify({ type: "typing", sender: parsed.sender }));
         return;
       }
     } catch (err) {
@@ -116,8 +95,6 @@ wss.on("connection", async (ws) => {
       activeUsers.delete(ws.username);
       broadcast(JSON.stringify({ type: "online", users: [...activeUsers] }));
       console.log("👋 Disconnected:", ws.username);
-    } else {
-      console.log("👋 Anonymous disconnected");
     }
   });
 });
