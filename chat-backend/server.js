@@ -26,7 +26,7 @@ let activeUsers = new Set();
 // WebSocket server
 const wss = new WebSocket.Server({ server });
 
-// Broadcast to all connected clients
+// Broadcast to all clients
 function broadcast(msg) {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
@@ -38,7 +38,7 @@ function broadcast(msg) {
 // Subscribe to Redis channel
 (async () => {
   await redis.subscribe(CHANNEL, (message) => {
-    const msgStr = message.toString(); // Convert buffer to string
+    const msgStr = message.toString(); // convert buffer to string
     console.log("🔔 Redis published message:", msgStr);
     broadcast(msgStr);
   });
@@ -51,7 +51,11 @@ wss.on("connection", async (ws) => {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -50, -1);
     lastMessages.forEach((msg) => {
-      const msgStr = msg.toString(); // Convert buffer to string
+      let msgStr;
+      if (Buffer.isBuffer(msg)) msgStr = msg.toString();
+      else if (typeof msg === "object") msgStr = JSON.stringify(msg);
+      else msgStr = msg;
+
       console.log("📤 Sending to client:", msgStr);
       ws.send(msgStr);
     });
@@ -60,9 +64,11 @@ wss.on("connection", async (ws) => {
   }
 
   ws.on("message", async (raw) => {
-    console.log("📩 Received from client:", raw);
+    const str = raw.toString(); // Convert Buffer to string
+    console.log("📩 Received from client:", str);
+
     try {
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(str);
 
       if (parsed.type === "login") {
         ws.username = parsed.username;
@@ -79,8 +85,10 @@ wss.on("connection", async (ws) => {
           text: parsed.text,
           createdAt: parsed.createdAt || Date.now(),
         };
+
         const msgString = JSON.stringify(msgObj);
         console.log("📡 Publishing message to Redis:", msgString);
+
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
         await redis.publish(CHANNEL, msgString);
@@ -88,18 +96,14 @@ wss.on("connection", async (ws) => {
       }
 
       if (parsed.type === "delete") {
-        await redis.publish(
-          CHANNEL,
-          JSON.stringify({ type: "delete", id: parsed.id })
-        );
+        const msgString = JSON.stringify({ type: "delete", id: parsed.id });
+        await redis.publish(CHANNEL, msgString);
         return;
       }
 
       if (parsed.type === "typing") {
-        await redis.publish(
-          CHANNEL,
-          JSON.stringify({ type: "typing", sender: parsed.sender })
-        );
+        const msgString = JSON.stringify({ type: "typing", sender: parsed.sender });
+        await redis.publish(CHANNEL, msgString);
         return;
       }
     } catch (err) {
