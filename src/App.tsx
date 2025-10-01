@@ -5,7 +5,6 @@ interface Message {
   id?: string;
   sender: string;
   text: string;
-  imageUrl?: string;
   createdAt: number;
   type?: string;
 }
@@ -48,7 +47,7 @@ function App() {
   useEffect(() => {
     if (!authenticated) return;
 
-    ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com"); // Updated for deployment
+    ws.current = new WebSocket("wss://mubu-backend-rpx9.onrender.com"); // Render backend URL
 
     ws.current.onopen = () => {
       ws.current?.send(JSON.stringify({ type: "login", username }));
@@ -57,40 +56,41 @@ function App() {
     ws.current.onclose = () => console.log("❌ WebSocket disconnected");
 
     ws.current.onmessage = (event) => {
+      let msg;
       try {
-        const msg: Message = JSON.parse(event.data);
-
-        if (msg.type === "message") {
-          setMessages((prev) => {
-            const isDuplicate = prev.some((m) => m.id === msg.id);
-            if (isDuplicate) return prev;
-            return [...prev, msg];
-          });
-        }
-
-        if (msg.type === "delete") {
-          setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-        }
-
-        if (msg.type === "typing" && msg.sender !== username) {
-          setTypingUser(msg.sender);
-          setTimeout(() => setTypingUser(null), 2000);
-        }
+        const data =
+          typeof event.data === "string" ? event.data : event.data.toString();
+        msg = JSON.parse(data);
       } catch (err) {
         console.error("❌ Failed to parse message:", event.data);
+        return;
+      }
+
+      // Message handling
+      if (msg.type === "message") {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev; // Skip duplicates
+          return [...prev, msg];
+        });
+      }
+
+      if (msg.type === "delete") {
+        setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+      }
+
+      if (msg.type === "typing" && msg.sender !== username) {
+        setTypingUser(msg.sender);
+        setTimeout(() => setTypingUser(null), 2000);
       }
     };
 
     return () => ws.current?.close();
   }, [authenticated]);
 
-  // Scroll to bottom on new message
+  // Auto-scroll to bottom
   useEffect(() => {
-    const timer = setTimeout(() => {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [messages]);
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, typingUser]);
 
   const handleLogin = () => {
     if (PASSWORDS[password]) {
@@ -154,11 +154,10 @@ function App() {
         {messages.map((msg, idx) => {
           const isMe = msg.sender === username;
           const cls = isMe ? "me" : msg.sender;
-          const showProfile = !isMe;
 
           return (
             <div key={idx} className={`message-group ${cls}`}>
-              {showProfile && (
+              {!isMe && (
                 <div
                   className="avatar message-avatar"
                   style={{ backgroundColor: getAvatar(msg.sender).color }}
@@ -167,12 +166,9 @@ function App() {
                 </div>
               )}
               <div className="message-content">
-                {showProfile && <div className="sender-name">{msg.sender}</div>}
+                {!isMe && <div className="sender-name">{msg.sender}</div>}
                 <div className={`message ${cls}`}>
-                  {msg.text && <div>{msg.text}</div>}
-                  {msg.imageUrl && (
-                    <img src={msg.imageUrl} alt="chat-img" className="chat-image" />
-                  )}
+                  <div>{msg.text}</div>
                   <span className="timestamp">{formatTime(msg.createdAt)}</span>
                   {isMe && msg.id && (
                     <button
@@ -197,11 +193,6 @@ function App() {
           type="text"
           value={newMessage}
           placeholder="Type a message..."
-          onFocus={() => {
-            setTimeout(() => {
-              chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            }, 300);
-          }}
           onChange={(e) => {
             setNewMessage(e.target.value);
             ws.current?.send(JSON.stringify({ type: "typing", sender: username }));
