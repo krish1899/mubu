@@ -1,52 +1,124 @@
-import express from "express";
-import { Redis } from "@upstash/redis";
-import dotenv from "dotenv";
-
-dotenv.config();
+require("dotenv").config(); // Load env
+const express = require("express");
+const cors = require("cors");
+const WebSocket = require("ws");
+const multer = require("multer");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
+const { Redis } = require("@upstash/redis");
 
 const app = express();
-app.use(express.json());
+app.use(cors());
+app.use("/uploads", express.static(path.join(__dirname, "uploads"))); 
 
-// Create Redis clients
+// Render dynamic port
+const PORT = process.env.PORT || 5050;
+const server = app.listen(PORT, () =>
+  console.log(`🚀 Server running on port ${PORT}`)
+);
+
+// Upstash Redis client
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_URL,
   token: process.env.UPSTASH_REDIS_TOKEN,
 });
 
-// Publisher endpoint
-app.post("/publish", async (req, res) => {
-  const { channel, message } = req.body;
+const CHANNEL = "chatroom";
+const MESSAGE_LIST = "chat_messages";
+let activeUsers = new Set();
+
+// Multer config
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) =>
+    cb(null, `${Date.now()}${path.extname(file.originalname)}`),
+});
+const upload = multer({ storage });
+
+app.post("/upload", upload.single("image"), (req, res) => {
+  const host = req.get("host");
+  const protocol = req.protocol;
+  const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  res.json({ imageUrl });
+});
+
+// WebSocket server
+const wss = new WebSocket.Server({ server });
+
+function broadcast(msg) {
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
+  });
+}
+
+// Subscribe to Redis channel
+(async () => {
+  await redis.subscribe(CHANNEL, (message) => {
+    broadcast(message);
+  });
+})();
+
+wss.on("connection", async (ws) => {
+  console.log("👤 New client connected");
+
+  // Send last 50 messages
   try {
-    await redis.publish(channel, message);
-    res.json({ success: true, message: "Message published" });
+    const lastMessages = await redis.lrange(MESSAGE_LIST, -50, -1);
+    lastMessages.forEach((msg) => ws.send(msg));
   } catch (err) {
-    console.error("Publish error:", err);
-    res.status(500).json({ error: "Publish failed" });
+    console.error("❌ Failed to fetch messages:", err);
   }
-});
 
-// Subscriber endpoint
-// (you don’t need a long-lived socket — Upstash will call your handler per message)
-app.get("/subscribe/:channel", async (req, res) => {
-  const channel = req.params.channel;
+  ws.on("message", async (raw) => {
+    try {
+      const parsed = JSON.parse(raw);
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.flushHeaders();
+      if (parsed.type === "login") {
+        ws.username = parsed.username;
+        activeUsers.add(parsed.username);
+        broadcast(JSON.stringify({ type: "online", users: [...activeUsers] }));
+        return;
+      }
 
-  // Subscribe to channel
-  const sub = redis.subscribe(channel, (msg) => {
-    res.write(`data: ${msg}\n\n`);
+      if (parsed.type === "message") {
+        const msgObj = {
+          type: "message",
+          id: uuidv4(),
+          sender: parsed.sender,
+          text: parsed.text,
+          imageUrl: parsed.imageUrl || null,
+          createdAt: parsed.createdAt,
+        };
+        const msgString = JSON.stringify(msgObj);
+        await redis.rpush(MESSAGE_LIST, msgString);
+        await redis.ltrim(MESSAGE_LIST, -500, -1);
+        await redis.publish(CHANNEL, msgString);
+        return;
+      }
+
+      if (parsed.type === "delete") {
+        await redis.publish(CHANNEL, JSON.stringify({ type: "delete", id: parsed.id }));
+        return;
+      }
+
+      if (parsed.type === "typing") {
+        await redis.publish(CHANNEL, JSON.stringify({ type: "typing", sender: parsed.sender }));
+        return;
+      }
+    } catch (err) {
+      console.error("❌ WS Error:", err);
+    }
   });
 
-  req.on("close", async () => {
-    console.log("Closing connection");
-    (await sub).unsubscribe();
-    res.end();
+  ws.on("close", () => {
+    if (ws.username) {
+      activeUsers.delete(ws.username);
+      broadcast(JSON.stringify({ type: "online", users: [...activeUsers] }));
+      console.log("👋 Disconnected:", ws.username);
+    } else {
+      console.log("👋 Anonymous disconnected");
+    }
   });
-});
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
 });
