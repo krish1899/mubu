@@ -1,17 +1,13 @@
-require("dotenv").config(); // Load env
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const WebSocket = require("ws");
-const multer = require("multer");
-const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const { Redis } = require("@upstash/redis");
 
 const app = express();
 app.use(cors());
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); 
 
-// Render dynamic port
 const PORT = process.env.PORT || 5050;
 const server = app.listen(PORT, () =>
   console.log(`🚀 Server running on port ${PORT}`)
@@ -27,24 +23,10 @@ const CHANNEL = "chatroom";
 const MESSAGE_LIST = "chat_messages";
 let activeUsers = new Set();
 
-// Multer config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, `${Date.now()}${path.extname(file.originalname)}`),
-});
-const upload = multer({ storage });
-
-app.post("/upload", upload.single("image"), (req, res) => {
-  const host = req.get("host");
-  const protocol = req.protocol;
-  const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
-  res.json({ imageUrl });
-});
-
 // WebSocket server
 const wss = new WebSocket.Server({ server });
 
+// Broadcast to all connected clients
 function broadcast(msg) {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
@@ -56,6 +38,7 @@ function broadcast(msg) {
 // Subscribe to Redis channel
 (async () => {
   await redis.subscribe(CHANNEL, (message) => {
+    console.log("🔔 Redis published message:", message);
     broadcast(message);
   });
 })();
@@ -66,12 +49,16 @@ wss.on("connection", async (ws) => {
   // Send last 50 messages
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -50, -1);
-    lastMessages.forEach((msg) => ws.send(msg));
+    lastMessages.forEach((msg) => {
+      console.log("📤 Sending to client:", msg);
+      ws.send(msg);
+    });
   } catch (err) {
     console.error("❌ Failed to fetch messages:", err);
   }
 
   ws.on("message", async (raw) => {
+    console.log("📩 Received from client:", raw);
     try {
       const parsed = JSON.parse(raw);
 
@@ -88,10 +75,10 @@ wss.on("connection", async (ws) => {
           id: uuidv4(),
           sender: parsed.sender,
           text: parsed.text,
-          imageUrl: parsed.imageUrl || null,
-          createdAt: parsed.createdAt,
+          createdAt: parsed.createdAt || Date.now(),
         };
         const msgString = JSON.stringify(msgObj);
+        console.log("📡 Publishing message to Redis:", msgString);
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
         await redis.publish(CHANNEL, msgString);
@@ -99,12 +86,18 @@ wss.on("connection", async (ws) => {
       }
 
       if (parsed.type === "delete") {
-        await redis.publish(CHANNEL, JSON.stringify({ type: "delete", id: parsed.id }));
+        await redis.publish(
+          CHANNEL,
+          JSON.stringify({ type: "delete", id: parsed.id })
+        );
         return;
       }
 
       if (parsed.type === "typing") {
-        await redis.publish(CHANNEL, JSON.stringify({ type: "typing", sender: parsed.sender }));
+        await redis.publish(
+          CHANNEL,
+          JSON.stringify({ type: "typing", sender: parsed.sender })
+        );
         return;
       }
     } catch (err) {
