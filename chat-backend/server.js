@@ -48,6 +48,8 @@ wss.on("connection", async (ws) => {
     try {
       const parsed = JSON.parse(str);
 
+      if (parsed.type === "ping") return;
+
       if (parsed.type === "login") {
         ws.username = parsed.username;
         activeUsers.add(parsed.username);
@@ -58,18 +60,18 @@ wss.on("connection", async (ws) => {
       if (parsed.type === "message") {
         const msgObj = {
           type: "message",
-          id: uuidv4(),
+          id: parsed.id || uuidv4(),
           sender: parsed.sender,
           text: parsed.text,
-          createdAt: Date.now(),
+          createdAt: parsed.createdAt || Date.now(),
         };
 
         const msgString = JSON.stringify(msgObj);
 
-        // 1️⃣ Broadcast immediately
+        // Broadcast immediately
         broadcast(msgString);
 
-        // 2️⃣ Store in Redis after broadcasting
+        // Store in Redis
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
 
