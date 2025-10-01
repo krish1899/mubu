@@ -38,8 +38,9 @@ function broadcast(msg) {
 // Subscribe to Redis channel
 (async () => {
   await redis.subscribe(CHANNEL, (message) => {
-    console.log("🔔 Redis published message:", message);
-    broadcast(message);
+    const msgStr = message.toString(); // Convert buffer to string
+    console.log("🔔 Redis published message:", msgStr);
+    broadcast(msgStr);
   });
 })();
 
@@ -50,8 +51,9 @@ wss.on("connection", async (ws) => {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -50, -1);
     lastMessages.forEach((msg) => {
-      console.log("📤 Sending to client:", msg);
-      ws.send(msg);
+      const msgStr = msg.toString(); // Convert buffer to string
+      console.log("📤 Sending to client:", msgStr);
+      ws.send(msgStr);
     });
   } catch (err) {
     console.error("❌ Failed to fetch messages:", err);
