@@ -17,10 +17,10 @@ const PASSWORDS: { [key: string]: string } = {
 
 const getAvatar = (sender: string) => {
   const initial = sender.charAt(0).toUpperCase();
-  let color = '#ccc'; 
-  if (sender === 'mumu') color = '#ffc107';
-  if (sender === 'bubu') color = '#17a2b8';
-  if (sender === 'me') color = '#007bff'; 
+  let color = "#ccc";
+  if (sender === "mumu") color = "#ffc107";
+  if (sender === "bubu") color = "#17a2b8";
+  if (sender === "me") color = "#007bff";
   return { initial, color };
 };
 
@@ -44,10 +44,11 @@ function App() {
     return `${hours}:${minutes}`;
   };
 
+  // WebSocket setup
   useEffect(() => {
     if (!authenticated) return;
 
-    ws.current = new WebSocket("ws://localhost:5050");
+    ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com"); // Updated for deployment
 
     ws.current.onopen = () => {
       ws.current?.send(JSON.stringify({ type: "login", username }));
@@ -75,7 +76,6 @@ function App() {
           setTypingUser(msg.sender);
           setTimeout(() => setTypingUser(null), 2000);
         }
-
       } catch (err) {
         console.error("❌ Failed to parse message:", event.data);
       }
@@ -84,10 +84,11 @@ function App() {
     return () => ws.current?.close();
   }, [authenticated]);
 
+  // Scroll to bottom on new message
   useEffect(() => {
     const timer = setTimeout(() => {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100); 
+    }, 100);
     return () => clearTimeout(timer);
   }, [messages]);
 
@@ -115,45 +116,21 @@ function App() {
     setNewMessage("");
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !ws.current) return;
-
-    const formData = new FormData();
-    formData.append("image", file);
-
-    fetch("http://localhost:5050/upload", {
-      method: "POST",
-      body: formData,
-    })
-      .then((res) => res.json())
-      .then(({ imageUrl }) => {
-        const messageToSend: Message = {
-          type: "message",
-          sender: username,
-          text: "",
-          imageUrl,
-          createdAt: Date.now(),
-        };
-        ws.current?.send(JSON.stringify(messageToSend));
-      });
-  };
-
   if (!authenticated) {
     return (
       <div className="login">
-  <div className="login-box">
-    <img src="/logo.png" alt="Logo" className="login-logo" />
-    <input
-      type="password"
-      placeholder="Enter password"
-      value={password}
-      onChange={(e) => setPassword(e.target.value)}
-    />
-    <button onClick={handleLogin}>Enter</button>
-    {error && <p className="error">{error}</p>}
-  </div>
-</div>
+        <div className="login-box">
+          <img src="/logo.png" alt="Logo" className="login-logo" />
+          <input
+            type="password"
+            placeholder="Enter password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button onClick={handleLogin}>Enter</button>
+          {error && <p className="error">{error}</p>}
+        </div>
+      </div>
     );
   }
 
@@ -161,8 +138,8 @@ function App() {
     <div className="app">
       <div className="header-bar">
         <div className="header-info">
-          <div 
-            className="avatar current-user-avatar" 
+          <div
+            className="avatar current-user-avatar"
             style={{ backgroundColor: getAvatar(username).color }}
           >
             {getAvatar(username).initial}
@@ -172,9 +149,8 @@ function App() {
       </div>
 
       <div className="chat-box">
-        {typingUser && (
-          <div className="typing-indicator">{typingUser} is typing…</div>
-        )}
+        {typingUser && <div className="typing-indicator">{typingUser} is typing…</div>}
+
         {messages.map((msg, idx) => {
           const isMe = msg.sender === username;
           const cls = isMe ? "me" : msg.sender;
@@ -183,17 +159,15 @@ function App() {
           return (
             <div key={idx} className={`message-group ${cls}`}>
               {showProfile && (
-                <div 
-                  className="avatar message-avatar" 
+                <div
+                  className="avatar message-avatar"
                   style={{ backgroundColor: getAvatar(msg.sender).color }}
                 >
                   {getAvatar(msg.sender).initial}
                 </div>
               )}
               <div className="message-content">
-                {showProfile && (
-                  <div className="sender-name">{msg.sender}</div>
-                )}
+                {showProfile && <div className="sender-name">{msg.sender}</div>}
                 <div className={`message ${cls}`}>
                   {msg.text && <div>{msg.text}</div>}
                   {msg.imageUrl && (
@@ -215,7 +189,7 @@ function App() {
             </div>
           );
         })}
-        <div ref={chatEndRef}></div> 
+        <div ref={chatEndRef}></div>
       </div>
 
       <div className="input-box">
@@ -234,14 +208,6 @@ function App() {
           }}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
         />
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleImageUpload}
-          style={{ display: "none" }}
-          id="image-upload"
-        />
-        <label htmlFor="image-upload" className="upload-btn">📷</label>
         <button onClick={handleSend}>Send</button>
       </div>
     </div>
