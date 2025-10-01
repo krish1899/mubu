@@ -47,7 +47,7 @@ function App() {
   useEffect(() => {
     if (!authenticated) return;
 
-    ws.current = new WebSocket("wss://mubu-backend-rpx9.onrender.com"); // Render backend URL
+    ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com"); // Render backend URL
 
     ws.current.onopen = () => {
       ws.current?.send(JSON.stringify({ type: "login", username }));
