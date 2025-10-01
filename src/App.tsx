@@ -14,6 +14,15 @@ const PASSWORDS: { [key: string]: string } = {
   "bubu123": "bubu",
 };
 
+const getAvatar = (sender: string) => {
+  const initial = sender.charAt(0).toUpperCase();
+  let color = "#ccc";
+  if (sender === "mumu") color = "#ffc107";
+  if (sender === "bubu") color = "#17a2b8";
+  if (sender === "me") color = "#007bff";
+  return { initial, color };
+};
+
 function App() {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -34,44 +43,52 @@ function App() {
     return `${hours}:${minutes}`;
   };
 
-  // WebSocket connection
+  // WebSocket setup
   useEffect(() => {
     if (!authenticated) return;
 
-    ws.current = new WebSocket("wss://mubu-backend-rpx9.onrender.com");
+    ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com"); // Render backend
 
     ws.current.onopen = () => {
       ws.current?.send(JSON.stringify({ type: "login", username }));
     };
+
+    ws.current.onclose = () => console.log("❌ WebSocket disconnected");
 
     ws.current.onmessage = (event) => {
       try {
         const msg: Message = JSON.parse(event.data);
 
         if (msg.type === "message") {
-          setMessages(prev => [...prev, msg]); // append message immediately
+          setMessages((prev) => {
+            const isDuplicate = prev.some((m) => m.id === msg.id);
+            if (isDuplicate) return prev;
+            return [...prev, msg];
+          });
+        }
+
+        if (msg.type === "delete") {
+          setMessages((prev) => prev.filter((m) => m.id !== msg.id));
         }
 
         if (msg.type === "typing" && msg.sender !== username) {
           setTypingUser(msg.sender);
           setTimeout(() => setTypingUser(null), 2000);
         }
-
-        if (msg.type === "delete") {
-          setMessages(prev => prev.filter(m => m.id !== msg.id));
-        }
       } catch (err) {
-        console.error("Failed to parse WS message:", event.data);
+        console.error("❌ Failed to parse message:", event.data);
       }
     };
 
-    ws.current.onclose = () => console.log("WebSocket disconnected");
-
     return () => ws.current?.close();
-  }, [authenticated]);
+  }, [authenticated, username]);
 
+  // Scroll to bottom on new message
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const timer = setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+    return () => clearTimeout(timer);
   }, [messages]);
 
   const handleLogin = () => {
@@ -79,47 +96,123 @@ function App() {
       setUsername(PASSWORDS[password]);
       setAuthenticated(true);
       setError("");
-    } else setError("Incorrect password");
+    } else {
+      setError("Incorrect password");
+    }
   };
 
   const handleSend = () => {
-    if (!newMessage.trim() || !ws.current) return;
+    if (!newMessage.trim()) return;
 
-    const msg = {
+    const tempId = crypto.randomUUID();
+    const messageToSend: Message = {
       type: "message",
       sender: username,
       text: newMessage,
       createdAt: Date.now(),
+      id: tempId,
     };
 
-    ws.current.send(JSON.stringify(msg));
+    // Optimistic update: show instantly
+    setMessages((prev) => [...prev, messageToSend]);
     setNewMessage("");
-    setMessages(prev => [...prev, msg]); // show immediately
+
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify(messageToSend));
+    }
   };
 
   if (!authenticated) {
     return (
       <div className="login">
-        <input value={password} onChange={e => setPassword(e.target.value)} placeholder="Password"/>
-        <button onClick={handleLogin}>Enter</button>
-        {error && <p>{error}</p>}
+        <div className="login-box">
+          <img src="/logo.png" alt="Logo" className="login-logo" />
+          <input
+            type="password"
+            placeholder="Enter password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button onClick={handleLogin}>Enter</button>
+          {error && <p className="error">{error}</p>}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="app">
-      <div className="chat-box">
-        {typingUser && <div>{typingUser} is typing…</div>}
-        {messages.map((m, i) => (
-          <div key={i}>
-            <b>{m.sender}:</b> {m.text} <small>{formatTime(m.createdAt)}</small>
+      <div className="header-bar">
+        <div className="header-info">
+          <div
+            className="avatar current-user-avatar"
+            style={{ backgroundColor: getAvatar(username).color }}
+          >
+            {getAvatar(username).initial}
           </div>
-        ))}
+          <div className="user-name">Welcome, {username}!</div>
+        </div>
+      </div>
+
+      <div className="chat-box">
+        {typingUser && <div className="typing-indicator">{typingUser} is typing…</div>}
+
+        {messages.map((msg) => {
+          const isMe = msg.sender === username;
+          const cls = isMe ? "me" : msg.sender;
+          const showProfile = !isMe;
+
+          return (
+            <div key={msg.id} className={`message-group ${cls}`}>
+              {showProfile && (
+                <div
+                  className="avatar message-avatar"
+                  style={{ backgroundColor: getAvatar(msg.sender).color }}
+                >
+                  {getAvatar(msg.sender).initial}
+                </div>
+              )}
+              <div className="message-content">
+                {showProfile && <div className="sender-name">{msg.sender}</div>}
+                <div className={`message ${cls}`}>
+                  <div>{msg.text}</div>
+                  <span className="timestamp">{formatTime(msg.createdAt)}</span>
+                  {isMe && msg.id && (
+                    <button
+                      className="delete-btn"
+                      onClick={() =>
+                        ws.current?.send(JSON.stringify({ type: "delete", id: msg.id }))
+                      }
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
         <div ref={chatEndRef}></div>
       </div>
-      <input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message"/>
-      <button onClick={handleSend}>Send</button>
+
+      <div className="input-box">
+        <input
+          type="text"
+          value={newMessage}
+          placeholder="Type a message..."
+          onFocus={() => {
+            setTimeout(() => {
+              chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, 300);
+          }}
+          onChange={(e) => {
+            setNewMessage(e.target.value);
+            ws.current?.send(JSON.stringify({ type: "typing", sender: username }));
+          }}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+        />
+        <button onClick={handleSend}>Send</button>
+      </div>
     </div>
   );
 }
