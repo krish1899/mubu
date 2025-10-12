@@ -36,7 +36,7 @@ wss.on("connection", async (ws) => {
 
   // Send last 50 messages on connection
   try {
-    const lastMessages = await redis.lrange(MESSAGE_LIST, -50, -1);
+    const lastMessages = await redis.lrange(MESSAGE_LIST, -5, -1);
     lastMessages.forEach(msg => {
       try {
         const parsed = JSON.parse(msg);

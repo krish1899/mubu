@@ -1,0 +1,51 @@
+Project: Mubu Chat Application
+
+Overview:
+This is a full-stack real-time chat application built with React (TypeScript) for the frontend and Node.js/Express with WebSocket and Redis for the backend. It supports live messaging, login, message history, and user presence features.
+
+Frontend (React + Vite):
+- Uses React and TypeScript for a modern, type-safe UI.
+- Vite is used for fast development and build tooling.
+- The main UI is in `src/App.tsx`, which manages login, chat messages, typing indicators, and message deletion.
+- Styling is handled by `src/App.css`, providing a clean, modern chat interface.
+- Entry point is `src/main.tsx`, which renders the app into the DOM.
+- Login is password-based, mapping to usernames "mumu" and "bubu".
+- Real-time chat is achieved via a WebSocket connection to the backend.
+- Optimistic UI updates are used for sending messages.
+- Shows typing indicators, timestamps, and allows message deletion.
+
+Backend (Node.js + Express + WebSocket + Redis):
+- Located in `chat-backend/server.js`.
+- Uses Express for HTTP server and WebSocket for real-time communication.
+- Stores chat messages in Redis (Upstash), keeping the last 500 messages.
+- Broadcasts messages, typing events, and deletions to all connected clients.
+- Handles user login, presence, and message history retrieval.
+
+Key Features:
+- Real-time messaging with live updates.
+- Login system with password mapping to usernames.
+- Typing indicator for active users.
+- Message deletion and optimistic UI updates.
+- Message history loaded from Redis on connection.
+- Responsive, modern UI with avatars and timestamps.
+
+Dependencies:
+- React, React DOM, TypeScript, Vite, Firebase, emoji-mart, Upstash Redis, Expo (for possible mobile support).
+- ESLint and TypeScript for code quality and type safety.
+
+How It Works:
+1. User logs in with a password ("mumu123" or "bubu123").
+2. The frontend connects to the backend via WebSocket.
+3. Messages are sent and received in real-time, with typing indicators and message deletion.
+4. The backend stores messages in Redis and broadcasts updates to all clients.
+5. On connection, the last 50 messages are loaded from Redis for chat history.
+
+Files:
+- `src/App.tsx`: Main React component for chat UI and logic.
+- `src/App.css`: Styles for the chat interface.
+- `src/main.tsx`: Entry point for the React app.
+- `chat-backend/server.js`: Node.js backend server.
+- `package.json`: Project dependencies and scripts.
+- `README.md`: Setup and configuration instructions.
+
+This project is suitable for learning or deploying a simple, scalable real-time chat system with modern web technologies.
