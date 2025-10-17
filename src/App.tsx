@@ -13,10 +13,10 @@ const PASSWORDS: { [key: string]: string } = {
   "bubu123": "bubu",
 };
 
-// Picsum image helper (seed ensures session-based rotation)
+// Picsum image helper
 const getNewsImage = (seed: number) => `https://picsum.photos/seed/${seed}/400/250`;
 
-// Full news data
+// Sample news data
 const NEWS_DATA = [
   { 
     title: "Global Markets See Sudden Dip After Central Bank Rate Decision", 
@@ -361,18 +361,28 @@ function App() {
     return `${hours}:${minutes}`;
   };
 
-  // Initialize session news with random rotation on login
+  // ------------------- SERVICE WORKER & NOTIFICATIONS -------------------
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/service-worker.js")
+        .then(() => console.log("✅ Service worker registered"))
+        .catch(err => console.error("❌ SW registration failed:", err));
+    }
+
+    if ("Notification" in window) {
+      Notification.requestPermission().then(p => console.log("Notification permission:", p));
+    }
+  }, []);
+
+  // ------------------- SESSION NEWS -------------------
   useEffect(() => {
     if (!authenticated) return;
-
     const shuffled = [...NEWS_DATA].sort(() => 0.5 - Math.random());
-    setSessionNews(shuffled.slice(0, 10)); // first 5 normal, 6th is private chat
-
-    // Generate random seeds for images
+    setSessionNews(shuffled.slice(0, 10));
     setImageSeeds(Array.from({ length: 10 }, () => Math.floor(Math.random() * 1000)));
   }, [authenticated]);
 
-  // WebSocket setup for chat (fifth card)
+  // ------------------- WEBSOCKET CHAT -------------------
   useEffect(() => {
     if (!authenticated) return;
 
@@ -380,7 +390,6 @@ function App() {
 
     ws.current.onopen = () => {
       ws.current?.send(JSON.stringify({ type: "login", username }));
-      // Do NOT clear messages here, merge new ones
     };
 
     ws.current.onmessage = (event) => {
@@ -417,6 +426,7 @@ function App() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // ------------------- LOGIN -------------------
   const handleLogin = () => {
     if (PASSWORDS[password]) {
       setUsername(PASSWORDS[password]);
@@ -427,6 +437,7 @@ function App() {
     }
   };
 
+  // ------------------- SEND MESSAGE -------------------
   const handleSend = () => {
     if (!newMessage.trim()) return;
 
@@ -447,7 +458,7 @@ function App() {
     }
   };
 
-  // Login Page
+  // ------------------- RENDER LOGIN -------------------
   if (!authenticated) {
     return (
       <div className="login">
@@ -470,12 +481,11 @@ function App() {
     );
   }
 
-  // Main App
+  // ------------------- RENDER MAIN APP -------------------
   return (
     <div className="app">
       {!selectedCard ? (
         <>
-          {/* Top Bar */}
           <div className="news-top-bar">
             Top News
             <span className="menu-icon" onClick={() => setShowMenu((prev) => !prev)}>☰</span>
@@ -488,7 +498,6 @@ function App() {
             )}
           </div>
 
-          {/* News Feed */}
           <div className="news-feed">
             {sessionNews.map((card, idx) => (
               <div key={idx} className="news-card" onClick={() => setSelectedCard(idx)}>
@@ -500,7 +509,6 @@ function App() {
           </div>
         </>
       ) : (
-        // News Detail
         <div className="news-detail">
           <button className="back-btn" onClick={() => setSelectedCard(null)}>← Back</button>
           <img src={getNewsImage(imageSeeds[selectedCard!])} alt="news" className="news-detail-image" />

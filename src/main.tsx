@@ -8,3 +8,12 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/service-worker.js")
+    .then(() => console.log("✅ Service worker registered"));
+}
+
+// Ask once for permission
+if ("Notification" in window) {
+  Notification.requestPermission();
+}
