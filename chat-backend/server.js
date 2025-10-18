@@ -76,23 +76,11 @@ wss.on("connection", async (ws) => {
   // ---------------------- SEND LAST 5 MESSAGES ----------------------
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -5, -1);
-
     lastMessages.forEach((msg) => {
       try {
-        const parsed = JSON.parse(msg);
-
-        // Send as full object to keep frontend consistent
-        ws.send(
-          JSON.stringify({
-            type: "message",
-            sender: parsed.sender,
-            text: parsed.text,
-            createdAt: parsed.createdAt,
-            id: parsed.id,
-          })
-        );
+        ws.send(typeof msg === "string" ? msg : JSON.stringify(msg));
       } catch (err) {
-        console.error("❌ Failed to parse stored message:", msg);
+        console.error("❌ Failed to replay message:", msg);
       }
     });
   } catch (err) {
@@ -103,7 +91,6 @@ wss.on("connection", async (ws) => {
   ws.on("message", async (raw) => {
     try {
       const parsed = JSON.parse(raw.toString());
-
       if (parsed.type === "ping") return;
 
       // User login
@@ -126,10 +113,7 @@ wss.on("connection", async (ws) => {
 
         const msgString = JSON.stringify(msgObj);
 
-        // Broadcast to all users
         broadcast(msgString);
-
-        // Save to Redis & keep last 500 messages
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
 
@@ -141,6 +125,7 @@ wss.on("connection", async (ws) => {
           body: "Tap to read more inside the app.",
           icon: "/jujo.jpg",
         });
+
         subscribers.forEach((sub) =>
           webpush.sendNotification(sub, payload).catch((err) =>
             console.error("❌ Push error:", err)
