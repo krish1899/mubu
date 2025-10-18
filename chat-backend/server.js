@@ -9,7 +9,10 @@ const bodyParser = require("body-parser");
 
 // ---------------------- APP SETUP ----------------------
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL, // Add your Vercel frontend URL here
+  methods: ["GET","POST"]
+}));
 app.use(bodyParser.json());
 
 const PORT = process.env.PORT || 5050;
@@ -24,12 +27,8 @@ const redis = new Redis({
 });
 
 // ---------------------- PUSH NOTIFICATIONS ----------------------
-// Generate once: npx web-push generate-vapid-keys
-// Put them in your .env:
-// VAPID_PUBLIC_KEY=xxx
-// VAPID_PRIVATE_KEY=xxx
 webpush.setVapidDetails(
-  "mailto:tinkupinky824@gmail.com",
+  "mailto:your-email@example.com",
   process.env.VAPID_PUBLIC_KEY,
   process.env.VAPID_PRIVATE_KEY
 );
@@ -43,7 +42,18 @@ app.post("/subscribe", (req, res) => {
   res.status(201).json({ message: "Subscribed successfully" });
 });
 
-// Sample news headlines for disguise
+// ---------------------- WEBSOCKET CHAT ----------------------
+const MESSAGE_LIST = "chat_messages";
+let activeUsers = new Set();
+
+const wss = new WebSocket.Server({ server });
+
+function broadcast(msg) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) client.send(msg);
+  });
+}
+
 const NEWS_TITLES = [
   "Breaking: Tech trends shaping the week ahead",
   "Update: Global markets show mixed reactions",
@@ -54,20 +64,6 @@ const NEWS_TITLES = [
   "Latest: Cloud computing adoption skyrockets",
   "Trending: Apps improving productivity worldwide",
 ];
-
-// ---------------------- WEBSOCKET SETUP ----------------------
-const MESSAGE_LIST = "chat_messages";
-let activeUsers = new Set();
-
-const wss = new WebSocket.Server({ server });
-
-function broadcast(msg) {
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
-    }
-  });
-}
 
 wss.on("connection", async (ws) => {
   console.log("👤 New client connected");
@@ -89,10 +85,8 @@ wss.on("connection", async (ws) => {
   }
 
   ws.on("message", async (raw) => {
-    const str = raw.toString();
-
     try {
-      const parsed = JSON.parse(str);
+      const parsed = JSON.parse(raw.toString());
       if (parsed.type === "ping") return;
 
       if (parsed.type === "login") {
@@ -110,30 +104,21 @@ wss.on("connection", async (ws) => {
           text: parsed.text,
           createdAt: parsed.createdAt || Date.now(),
         };
-
         const msgString = JSON.stringify(msgObj);
 
-        // Broadcast message to all users
         broadcast(msgString);
-
-        // Save to Redis
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
 
-        // Send disguised news notification
-        const randomTitle =
-          NEWS_TITLES[Math.floor(Math.random() * NEWS_TITLES.length)];
-
+        // Push notification
+        const randomTitle = NEWS_TITLES[Math.floor(Math.random() * NEWS_TITLES.length)];
         const payload = JSON.stringify({
           title: randomTitle,
           body: "Tap to read more inside the app.",
           icon: "/jujo.jpg",
         });
-
-        subscribers.forEach((sub) => {
-          webpush.sendNotification(sub, payload).catch((err) => {
-            console.error("❌ Push error:", err);
-          });
+        subscribers.forEach(sub => {
+          webpush.sendNotification(sub, payload).catch(err => console.error("❌ Push error:", err));
         });
         return;
       }
@@ -147,6 +132,7 @@ wss.on("connection", async (ws) => {
         broadcast(JSON.stringify({ type: "typing", sender: parsed.sender }));
         return;
       }
+
     } catch (err) {
       console.error("❌ WS Error:", err);
     }

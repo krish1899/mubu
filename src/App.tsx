@@ -361,18 +361,46 @@ function App() {
     return `${hours}:${minutes}`;
   };
 
-  // ------------------- SERVICE WORKER & NOTIFICATIONS -------------------
-  useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/service-worker.js")
-        .then(() => console.log("✅ Service worker registered"))
-        .catch(err => console.error("❌ SW registration failed:", err));
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
     }
+    return outputArray;
+  }
 
-    if ("Notification" in window) {
-      Notification.requestPermission().then(p => console.log("Notification permission:", p));
-    }
-  }, []);
+  // ------------------- SERVICE WORKER & NOTIFICATIONS -------------------
+useEffect(() => {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/service-worker.js")
+      .then(() => console.log("✅ Service worker registered"))
+      .catch(err => console.error("❌ SW registration failed:", err));
+  }
+
+  if ("Notification" in window) {
+    Notification.requestPermission()
+      .then(p => console.log("Notification permission:", p));
+  }
+
+  // Subscribe for push notifications
+  navigator.serviceWorker.ready.then(async (registration) => {
+    const sub = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array("BK7PmwxOamyIZBa7TZd5VQ0E7ve1KvyNofWDWqRR-9dRuNajkgVZY3L1SQcDoAHIJHlUMA2y3oKSPmD86-IWAAE")
+    });
+
+    await fetch("https://mubu-backend-rpx8.onrender.com/subscribe", {
+      method: "POST",
+      body: JSON.stringify(sub),
+      headers: { "Content-Type": "application/json" },
+    });
+    console.log("✅ Subscribed for push notifications");
+  });
+}, []);
+
 
   // ------------------- SESSION NEWS -------------------
   useEffect(() => {
