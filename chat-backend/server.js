@@ -9,10 +9,12 @@ const bodyParser = require("body-parser");
 
 // ---------------------- APP SETUP ----------------------
 const app = express();
-app.use(cors({
-  origin: process.env.FRONTEND_URL, // Add your Vercel frontend URL here
-  methods: ["GET","POST"]
-}));
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL,
+    methods: ["GET", "POST"],
+  })
+);
 app.use(bodyParser.json());
 
 const PORT = process.env.PORT || 5050;
@@ -35,6 +37,7 @@ webpush.setVapidDetails(
 
 let subscribers = [];
 
+// Add new subscriber
 app.post("/subscribe", (req, res) => {
   const subscription = req.body;
   subscribers.push(subscription);
@@ -48,12 +51,14 @@ let activeUsers = new Set();
 
 const wss = new WebSocket.Server({ server });
 
+// Broadcast message to all connected clients
 function broadcast(msg) {
-  wss.clients.forEach(client => {
+  wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) client.send(msg);
   });
 }
 
+// Sample news titles for push notifications
 const NEWS_TITLES = [
   "Breaking: Tech trends shaping the week ahead",
   "Update: Global markets show mixed reactions",
@@ -68,14 +73,24 @@ const NEWS_TITLES = [
 wss.on("connection", async (ws) => {
   console.log("👤 New client connected");
 
-  // Send last 5 messages
+  // ---------------------- SEND LAST 5 MESSAGES ----------------------
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -5, -1);
-    lastMessages.forEach(msg => {
+
+    lastMessages.forEach((msg) => {
       try {
         const parsed = JSON.parse(msg);
-        parsed.type = "message";
-        ws.send(JSON.stringify(parsed));
+
+        // Send as full object to keep frontend consistent
+        ws.send(
+          JSON.stringify({
+            type: "message",
+            sender: parsed.sender,
+            text: parsed.text,
+            createdAt: parsed.createdAt,
+            id: parsed.id,
+          })
+        );
       } catch (err) {
         console.error("❌ Failed to parse stored message:", msg);
       }
@@ -84,11 +99,14 @@ wss.on("connection", async (ws) => {
     console.error("❌ Failed to fetch messages:", err);
   }
 
+  // ---------------------- HANDLE INCOMING MESSAGES ----------------------
   ws.on("message", async (raw) => {
     try {
       const parsed = JSON.parse(raw.toString());
+
       if (parsed.type === "ping") return;
 
+      // User login
       if (parsed.type === "login") {
         ws.username = parsed.username;
         activeUsers.add(parsed.username);
@@ -96,6 +114,7 @@ wss.on("connection", async (ws) => {
         return;
       }
 
+      // Chat message
       if (parsed.type === "message") {
         const msgObj = {
           type: "message",
@@ -104,40 +123,50 @@ wss.on("connection", async (ws) => {
           text: parsed.text,
           createdAt: parsed.createdAt || Date.now(),
         };
+
         const msgString = JSON.stringify(msgObj);
 
+        // Broadcast to all users
         broadcast(msgString);
+
+        // Save to Redis & keep last 500 messages
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
 
-        // Push notification
-        const randomTitle = NEWS_TITLES[Math.floor(Math.random() * NEWS_TITLES.length)];
+        // Push notifications
+        const randomTitle =
+          NEWS_TITLES[Math.floor(Math.random() * NEWS_TITLES.length)];
         const payload = JSON.stringify({
           title: randomTitle,
           body: "Tap to read more inside the app.",
           icon: "/jujo.jpg",
         });
-        subscribers.forEach(sub => {
-          webpush.sendNotification(sub, payload).catch(err => console.error("❌ Push error:", err));
-        });
+        subscribers.forEach((sub) =>
+          webpush.sendNotification(sub, payload).catch((err) =>
+            console.error("❌ Push error:", err)
+          )
+        );
+
         return;
       }
 
+      // Delete message
       if (parsed.type === "delete") {
         broadcast(JSON.stringify({ type: "delete", id: parsed.id }));
         return;
       }
 
+      // Typing indicator
       if (parsed.type === "typing") {
         broadcast(JSON.stringify({ type: "typing", sender: parsed.sender }));
         return;
       }
-
     } catch (err) {
       console.error("❌ WS Error:", err);
     }
   });
 
+  // ---------------------- HANDLE CLIENT DISCONNECT ----------------------
   ws.on("close", () => {
     if (ws.username) {
       activeUsers.delete(ws.username);
