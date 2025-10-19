@@ -337,7 +337,7 @@ const NEWS_DATA = [
 ];
 
 // ----------------- NewsFeed Component -----------------
-function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, authenticated, setAuthenticated }: any) {
+function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, setAuthenticated }: any) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
