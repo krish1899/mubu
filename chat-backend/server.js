@@ -34,7 +34,7 @@ async function sendTelegramRandomPic() {
       body: JSON.stringify({
         chat_id: TELEGRAM_CHAT_ID,
         photo: picUrl,
-        caption: "📢 Random news feed",
+        caption: "new picture for you! 📸",
       }),
     });
     console.log("✅ Sent Telegram random pic");
