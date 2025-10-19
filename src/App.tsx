@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from "react-router-dom";
 import "./App.css";
 
 interface Message {
@@ -335,24 +336,64 @@ const NEWS_DATA = [
   }
 ];
 
-function App() {
+// ----------------- NewsFeed Component -----------------
+function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, authenticated, setAuthenticated }: any) {
+  const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
-  const [password, setPassword] = useState("");
-  const [username, setUsername] = useState("");
-  const [authenticated, setAuthenticated] = useState(false);
-  const [error, setError] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  const [sessionNews, setSessionNews] = useState<typeof NEWS_DATA>([]);
-  const [selectedCard, setSelectedCard] = useState<number | null>(null);
+  // Close menu if clicked outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
+  return (
+    <>
+      <div className="news-top-bar">
+        Top News
+        <span className="menu-icon" onClick={() => setShowMenu(prev => !prev)}>☰</span>
+        {showMenu && (
+          <div className="menu-dropdown" ref={menuRef}>
+            <div onClick={() => { setAuthenticated(false); setShowMenu(false); }}>Logout</div>
+            <div onClick={() => setDarkMode((prev: boolean) => !prev)}>
+              {darkMode ? "Light Mode" : "Dark Mode"}
+            </div>
+            <div>Profile</div>
+            <div>Settings</div>
+          </div>
+        )}
+      </div>
+
+      <div className="news-feed">
+        {sessionNews.map((card: any, idx: number) => (
+          <div key={idx} className="news-card" onClick={() => navigate(`/news/${idx}`)}>
+            <img src={getNewsImage(imageSeeds[idx])} alt="news" className="news-image" />
+            <h3>{card.title}</h3>
+            <p>{card.snippet}</p>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ----------------- NewsDetail Component -----------------
+function NewsDetail({ sessionNews, imageSeeds, username }: any) {
+  const { id } = useParams();
+  const idx = Number(id);
+  const navigate = useNavigate();
+  const [chatVisible, setChatVisible] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [typingUser, setTypingUser] = useState<string | null>(null);
-
-  const [imageSeeds, setImageSeeds] = useState<number[]>([]);
-
-  const ws = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const ws = useRef<WebSocket | null>(null);
 
   const formatTime = (ts: number) => {
     const date = new Date(ts);
@@ -361,100 +402,121 @@ function App() {
     return `${hours}:${minutes}`;
   };
 
-  function urlBase64ToUint8Array(base64String: string) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-  }
-
-  // ------------------- SERVICE WORKER & NOTIFICATIONS -------------------
-useEffect(() => {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/service-worker.js")
-      .then(() => console.log("✅ Service worker registered"))
-      .catch(err => console.error("❌ SW registration failed:", err));
-  }
-
-  if ("Notification" in window) {
-    Notification.requestPermission()
-      .then(p => console.log("Notification permission:", p));
-  }
-
-  // Subscribe for push notifications
-  navigator.serviceWorker.ready.then(async (registration) => {
-    const sub = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array("BK7PmwxOamyIZBa7TZd5VQ0E7ve1KvyNofWDWqRR-9dRuNajkgVZY3L1SQcDoAHIJHlUMA2y3oKSPmD86-IWAAE")
-    });
-
-    await fetch("https://mubu-backend-rpx8.onrender.com/subscribe", {
-      method: "POST",
-      body: JSON.stringify(sub),
-      headers: { "Content-Type": "application/json" },
-    });
-    console.log("✅ Subscribed for push notifications");
-  });
-}, []);
-
-
-  // ------------------- SESSION NEWS -------------------
   useEffect(() => {
-    if (!authenticated) return;
-    const shuffled = [...NEWS_DATA].sort(() => 0.5 - Math.random());
-    setSessionNews(shuffled.slice(0, 10));
-    setImageSeeds(Array.from({ length: 10 }, () => Math.floor(Math.random() * 1000)));
-  }, [authenticated]);
-
-  // ------------------- WEBSOCKET CHAT -------------------
-  useEffect(() => {
-    if (!authenticated) return;
-
     ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com");
-
-    ws.current.onopen = () => {
-      ws.current?.send(JSON.stringify({ type: "login", username }));
-    };
-
+    ws.current.onopen = () => ws.current?.send(JSON.stringify({ type: "login", username }));
     ws.current.onmessage = (event) => {
       try {
         const msg: Message & { type: string } = JSON.parse(event.data);
-
         if (msg.type === "message") {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
-          });
+          setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
         }
-
-        if (msg.type === "delete") {
-          setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-        }
-
         if (msg.type === "typing" && msg.sender !== username) {
           setTypingUser(msg.sender);
           setTimeout(() => setTypingUser(null), 2000);
         }
-      } catch (err) {
-        console.error("❌ Failed to parse message:", event.data);
-      }
+      } catch {}
     };
-
-    ws.current.onclose = () => console.log("❌ WebSocket disconnected");
-
     return () => ws.current?.close();
-  }, [authenticated, username]);
+  }, [username]);
 
-  // Scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ------------------- LOGIN -------------------
+  const handleSend = () => {
+    if (!newMessage.trim()) return;
+    const tempId = crypto.randomUUID();
+    const messageToSend: Message & { type: string } = {
+      type: "message",
+      sender: username,
+      text: newMessage,
+      createdAt: Date.now(),
+      id: tempId,
+    };
+    setMessages(prev => [...prev, messageToSend]);
+    setNewMessage("");
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify(messageToSend));
+    }
+  };
+
+  if (!sessionNews[idx]) return <p>Invalid news item.</p>;
+
+  return (
+    <div className="news-detail">
+      <button className="back-btn" onClick={() => navigate(-1)}>← Back</button>
+      <img src={getNewsImage(imageSeeds[idx])} alt="news" className="news-detail-image" />
+      <h2>{sessionNews[idx].title}</h2>
+      <p>{sessionNews[idx].content}</p>
+
+      {idx === 8 ? (
+        <>
+          {chatVisible && (
+            <div className="chat-container">
+              <button className="chat-hide-btn" onClick={() => setChatVisible(false)}>×</button>
+              <div className="chat-box">
+                {typingUser && <div className="typing-indicator">{typingUser} is typing...</div>}
+                {messages.map(msg => {
+                  const isMe = msg.sender === username;
+                  return (
+                    <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
+                      {!isMe && <div className="avatar message-avatar">{msg.sender[0].toUpperCase()}</div>}
+                      <div className="message-content">
+                        {!isMe && <div className="sender-name">{msg.sender}</div>}
+                        <div className={`message ${isMe ? "me" : msg.sender}`}>
+                          <div>{msg.text}</div>
+                          <span className="timestamp">{formatTime(msg.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={chatEndRef}></div>
+              </div>
+              <div className="input-box">
+                <input type="text" placeholder="Type a message..." value={newMessage}
+                  onChange={(e) => {
+                    setNewMessage(e.target.value);
+                    ws.current?.send(JSON.stringify({ type: "typing", sender: username }));
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && handleSend()} />
+                <button onClick={handleSend}>Send</button>
+              </div>
+            </div>
+          )}
+          {!chatVisible && (
+            <button onClick={() => setChatVisible(true)} style={{ margin: 10, padding: "8px 12px", borderRadius: 8, background: "#007bff", color: "#fff" }}>
+              .-.
+            </button>
+          )}
+        </>
+      ) : (
+        <p>Source: news Agency</p>
+      )}
+    </div>
+  );
+}
+
+// ----------------- Main App -----------------
+function App() {
+  const [authenticated, setAuthenticated] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
+
+  const [sessionNews, setSessionNews] = useState<typeof NEWS_DATA>([]);
+  const [imageSeeds, setImageSeeds] = useState<number[]>([]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const shuffled = [...NEWS_DATA].sort(() => 0.5 - Math.random());
+    const newsCount = Math.min(NEWS_DATA.length, 10);
+    setSessionNews(shuffled.slice(0, newsCount));
+    setImageSeeds(Array.from({ length: newsCount }, () => Math.floor(Math.random() * 1000)));
+  }, [authenticated]);
+
   const handleLogin = () => {
     if (PASSWORDS[password]) {
       setUsername(PASSWORDS[password]);
@@ -465,43 +527,16 @@ useEffect(() => {
     }
   };
 
-  // ------------------- SEND MESSAGE -------------------
-  const handleSend = () => {
-    if (!newMessage.trim()) return;
-
-    const tempId = crypto.randomUUID();
-    const messageToSend: Message & { type: string } = {
-      type: "message",
-      sender: username,
-      text: newMessage,
-      createdAt: Date.now(),
-      id: tempId,
-    };
-
-    setMessages((prev) => [...prev, messageToSend]);
-    setNewMessage("");
-
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify(messageToSend));
-    }
-  };
-
-  // ------------------- RENDER LOGIN -------------------
   if (!authenticated) {
     return (
       <div className="login">
         <div className="login-box">
           <img src="/jujo.jpg" alt="Logo" className="login-logo" />
-          <div style={{ textAlign: "center", marginBottom: "10px", color: "#007bff", fontWeight: 500 }}>
+          <div style={{ textAlign: "center", marginBottom: 10, color: "#007bff", fontWeight: 500 }}>
             Login for 24 hours updated news
           </div>
           <h2>Enter Passcode</h2>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
           <button onClick={handleLogin}>Enter</button>
           {error && <p className="error">{error}</p>}
         </div>
@@ -509,84 +544,31 @@ useEffect(() => {
     );
   }
 
-  // ------------------- RENDER MAIN APP -------------------
   return (
-    <div className="app">
-      {!selectedCard ? (
-        <>
-          <div className="news-top-bar">
-            Top News
-            <span className="menu-icon" onClick={() => setShowMenu((prev) => !prev)}>☰</span>
-            {showMenu && (
-              <div className="menu-dropdown">
-                <div onClick={() => { setAuthenticated(false); setShowMenu(false); }}>Logout</div>
-                <div>Profile</div>
-                <div>Settings</div>
-              </div>
-            )}
-          </div>
-
-          <div className="news-feed">
-            {sessionNews.map((card, idx) => (
-              <div key={idx} className="news-card" onClick={() => setSelectedCard(idx)}>
-                <img src={getNewsImage(imageSeeds[idx])} alt="news" className="news-image" />
-                <h3>{card.title}</h3>
-                <p>{card.snippet}</p>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <div className="news-detail">
-          <button className="back-btn" onClick={() => setSelectedCard(null)}>← Back</button>
-          <img src={getNewsImage(imageSeeds[selectedCard!])} alt="news" className="news-detail-image" />
-          <h2>{sessionNews[selectedCard].title}</h2>
-          <p>{sessionNews[selectedCard].content}</p>
-
-          <div className="news-source">
-            {selectedCard === 8 ? (
-              <>
-                <h4>Private Chat</h4>
-                <div className="chat-box">
-                  {typingUser && <div className="typing-indicator">{typingUser} is typing…</div>}
-                  {messages.map((msg) => {
-                    const isMe = msg.sender === username;
-                    return (
-                      <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
-                        {!isMe && <div className="avatar message-avatar">{msg.sender[0].toUpperCase()}</div>}
-                        <div className="message-content">
-                          {!isMe && <div className="sender-name">{msg.sender}</div>}
-                          <div className={`message ${isMe ? "me" : msg.sender}`}>
-                            <div>{msg.text}</div>
-                            <span className="timestamp">{formatTime(msg.createdAt)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div ref={chatEndRef}></div>
-                </div>
-                <div className="input-box">
-                  <input
-                    type="text"
-                    placeholder="Type a message..."
-                    value={newMessage}
-                    onChange={(e) => {
-                      setNewMessage(e.target.value);
-                      ws.current?.send(JSON.stringify({ type: "typing", sender: username }));
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                  />
-                  <button onClick={handleSend}>Send</button>
-                </div>
-              </>
-            ) : (
-              <p>Source: mubu news Agency</p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    <Router>
+      <div className={darkMode ? "app dark-mode" : "app"}>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <NewsFeed
+                sessionNews={sessionNews}
+                imageSeeds={imageSeeds}
+                username={username}
+                authenticated={authenticated}
+                setAuthenticated={setAuthenticated}
+                darkMode={darkMode}
+                setDarkMode={setDarkMode}
+              />
+            }
+          />
+          <Route
+            path="/news/:id"
+            element={<NewsDetail sessionNews={sessionNews} imageSeeds={imageSeeds} username={username} />}
+          />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 

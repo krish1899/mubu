@@ -4,46 +4,44 @@ const cors = require("cors");
 const WebSocket = require("ws");
 const { v4: uuidv4 } = require("uuid");
 const { Redis } = require("@upstash/redis");
-const webpush = require("web-push");
+const fetch = require("node-fetch");
 const bodyParser = require("body-parser");
 
 // ---------------------- APP SETUP ----------------------
 const app = express();
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL,
-    methods: ["GET", "POST"],
-  })
-);
+app.use(cors({ origin: process.env.FRONTEND_URL, methods: ["GET", "POST"] }));
 app.use(bodyParser.json());
 
 const PORT = process.env.PORT || 5050;
-const server = app.listen(PORT, () =>
-  console.log(`🚀 Server running on port ${PORT}`)
-);
+const server = app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
-// ---------------------- REDIS SETUP ----------------------
+// ---------------------- REDIS ----------------------
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_URL,
   token: process.env.UPSTASH_REDIS_TOKEN,
 });
 
-// ---------------------- PUSH NOTIFICATIONS ----------------------
-webpush.setVapidDetails(
-  "mailto:your-email@example.com",
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+// ---------------------- TELEGRAM BOT ----------------------
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-let subscribers = [];
-
-// Add new subscriber
-app.post("/subscribe", (req, res) => {
-  const subscription = req.body;
-  subscribers.push(subscription);
-  console.log("📬 New subscriber added");
-  res.status(201).json({ message: "Subscribed successfully" });
-});
+async function sendTelegramRandomPic() {
+  const picUrl = `https://picsum.photos/400?random=${Math.floor(Math.random() * 1000)}`;
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        photo: picUrl,
+        caption: "📢 Random news feed",
+      }),
+    });
+    console.log("✅ Sent Telegram random pic");
+  } catch (err) {
+    console.error("❌ Telegram send error:", err);
+  }
+}
 
 // ---------------------- WEBSOCKET CHAT ----------------------
 const MESSAGE_LIST = "chat_messages";
@@ -51,49 +49,40 @@ let activeUsers = new Set();
 
 const wss = new WebSocket.Server({ server });
 
-// Broadcast message to all connected clients
+// Broadcast to all clients
 function broadcast(msg) {
-  wss.clients.forEach((client) => {
+  wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) client.send(msg);
   });
 }
 
-// Sample news titles for push notifications
-const NEWS_TITLES = [
-  "Breaking: Tech trends shaping the week ahead",
-  "Update: Global markets show mixed reactions",
-  "Flash: Scientists unveil new breakthrough",
-  "Insight: AI tools transforming communication",
-  "Top story: Startups redefining remote work",
-  "Hot news: Economic reforms spark innovation",
-  "Latest: Cloud computing adoption skyrockets",
-  "Trending: Apps improving productivity worldwide",
-];
-
-wss.on("connection", async (ws) => {
-  console.log("👤 New client connected");
-
-  // ---------------------- SEND LAST 5 MESSAGES ----------------------
+// Send last 5 messages to newly connected client
+async function sendLastMessages(ws) {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -5, -1);
-    lastMessages.forEach((msg) => {
+    lastMessages.forEach(msg => {
       try {
         ws.send(typeof msg === "string" ? msg : JSON.stringify(msg));
-      } catch (err) {
-        console.error("❌ Failed to replay message:", msg);
-      }
+      } catch {}
     });
   } catch (err) {
     console.error("❌ Failed to fetch messages:", err);
   }
+}
 
-  // ---------------------- HANDLE INCOMING MESSAGES ----------------------
+// ---------------------- WEBSOCKET CONNECTION ----------------------
+wss.on("connection", async (ws) => {
+  console.log("👤 New client connected");
+
+  await sendLastMessages(ws);
+
   ws.on("message", async (raw) => {
     try {
       const parsed = JSON.parse(raw.toString());
+
       if (parsed.type === "ping") return;
 
-      // User login
+      // ---------------- User login ----------------
       if (parsed.type === "login") {
         ws.username = parsed.username;
         activeUsers.add(parsed.username);
@@ -101,7 +90,13 @@ wss.on("connection", async (ws) => {
         return;
       }
 
-      // Chat message
+      // ---------------- Typing indicator ----------------
+      if (parsed.type === "typing") {
+        broadcast(JSON.stringify({ type: "typing", sender: parsed.sender }));
+        return;
+      }
+
+      // ---------------- Chat message ----------------
       if (parsed.type === "message") {
         const msgObj = {
           type: "message",
@@ -113,37 +108,18 @@ wss.on("connection", async (ws) => {
 
         const msgString = JSON.stringify(msgObj);
 
-        broadcast(msgString);
+        // Save to Redis
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
 
-        // Push notifications
-        const randomTitle =
-          NEWS_TITLES[Math.floor(Math.random() * NEWS_TITLES.length)];
-        const payload = JSON.stringify({
-          title: randomTitle,
-          body: "Tap to read more inside the app.",
-          icon: "/jujo.jpg",
-        });
+        // Broadcast to all users
+        broadcast(msgString);
 
-        subscribers.forEach((sub) =>
-          webpush.sendNotification(sub, payload).catch((err) =>
-            console.error("❌ Push error:", err)
-          )
-        );
+        // Send Telegram pic only if <2 users online
+        if (activeUsers.size < 2) {
+          sendTelegramRandomPic();
+        }
 
-        return;
-      }
-
-      // Delete message
-      if (parsed.type === "delete") {
-        broadcast(JSON.stringify({ type: "delete", id: parsed.id }));
-        return;
-      }
-
-      // Typing indicator
-      if (parsed.type === "typing") {
-        broadcast(JSON.stringify({ type: "typing", sender: parsed.sender }));
         return;
       }
     } catch (err) {
@@ -151,7 +127,7 @@ wss.on("connection", async (ws) => {
     }
   });
 
-  // ---------------------- HANDLE CLIENT DISCONNECT ----------------------
+  // ---------------- Handle disconnect ----------------
   ws.on("close", () => {
     if (ws.username) {
       activeUsers.delete(ws.username);
