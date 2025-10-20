@@ -209,6 +209,24 @@ html, body, #root {
   display: flex;
   gap: 8px;
   margin-top: 8px;
+  align-items: center;
+}
+
+/* Camera button inside input */
+.camera-btn {
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  transition: background 0.2s;
+}
+.camera-btn:hover {
+  background: #0056b3;
 }
 
 .input-box input[type="text"] {
@@ -254,6 +272,7 @@ html, body, #root {
 .sender-name { font-size: 0.7rem; color: var(--color-text); margin-bottom: 2px; }
 .timestamp { font-size: 0.65rem; position: absolute; bottom: -14px; right: 5px; color: rgba(0,0,0,0.5); }
 
+/* Typing indicator */
 .typing-indicator { 
   font-size: 0.8rem; 
   color: #6c757d; 
@@ -278,88 +297,46 @@ html, body, #root {
   40% { opacity: 1; }
 }
 
-/* Full Dark Mode Overrides */
-.dark-mode {
-  background: #000;           /* Full app background */
-  color: #e0e0e0;             /* Default text color */
+/* Chat image styling */
+.chat-image {
+  max-width: 200px;
+  max-height: 150px;
+  border-radius: 12px;
+  margin-top: 5px;
+  object-fit: cover;
+  display: block;
 }
 
-/* Top bar & menu */
+/* Dark mode */
+.dark-mode {
+  background: #000;
+  color: #e0e0e0;
+}
 .dark-mode .news-top-bar {
   background: #1a1a1a;
   color: #e0e0e0;
 }
-
 .dark-mode .menu-dropdown {
   background: #111;
   color: #e0e0e0;
 }
-.dark-mode .menu-dropdown div:hover {
-  background: #333;
-}
-
-/* News feed cards */
-.dark-mode .news-feed {
-  background: #000;
-}
-.dark-mode .news-card {
-  background: #1c1c1c;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  color: #e0e0e0;
-}
+.dark-mode .menu-dropdown div:hover { background: #333; }
+.dark-mode .news-feed { background: #000; }
+.dark-mode .news-card { background: #1c1c1c; box-shadow: 0 4px 12px rgba(0,0,0,0.5); color: #e0e0e0; }
 .dark-mode .news-card h3,
-.dark-mode .news-card p {
-  color: #e0e0e0;
-}
-.dark-mode .news-card:hover::after {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-/* News detail view */
-.dark-mode .news-detail {
-  background: #000;
-  color: #e0e0e0;
-}
+.dark-mode .news-card p { color: #e0e0e0; }
+.dark-mode .news-detail { background: #000; color: #e0e0e0; }
 .dark-mode .news-detail h2,
 .dark-mode .news-detail p,
 .dark-mode .back-btn,
-.dark-mode .news-source p {
-  color: #e0e0e0;
-}
-.dark-mode .news-detail-image {
-  filter: brightness(0.8);
-}
-
-/* Chat box */
-.dark-mode .chat-box {
-  background: #111;
-  border-color: #333;
-}
-.dark-mode .input-box input {
-  background: #1c1c1c;
-  color: #e0e0e0;
-  border-color: #333;
-}
-.dark-mode .input-box button {
-  background: #4a90e2;
-}
-.dark-mode .message.me {
-  background: #4a90e2;
-  color: #fff;
-}
-.dark-mode .message.mumu {
-  background: #f0ad4e;
-  color: #000;
-}
-.dark-mode .message.bubu {
-  background: #17a2b8;
-  color: #fff;
-}
-
-/* Typing indicator */
-.dark-mode .typing-indicator {
-  color: #ccc;
-}
-.dark-mode .typing-indicator span {
-  background: #555;
-}
+.dark-mode .news-source p { color: #e0e0e0; }
+.dark-mode .news-detail-image { filter: brightness(0.8); }
+.dark-mode .chat-box { background: #111; border-color: #333; }
+.dark-mode .input-box input { background: #1c1c1c; color: #e0e0e0; border-color: #333; }
+.dark-mode .input-box button { background: #4a90e2; }
+.dark-mode .message.me { background: #4a90e2; color: #fff; }
+.dark-mode .message.mumu { background: #f0ad4e; color: #000; }
+.dark-mode .message.bubu { background: #17a2b8; color: #fff; }
+.dark-mode .typing-indicator { color: #ccc; }
+.dark-mode .typing-indicator span { background: #555; }
+.dark-mode .chat-image { filter: brightness(0.9); }

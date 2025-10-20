@@ -5,7 +5,8 @@ import "./App.css";
 interface Message {
   id?: string;
   sender: string;
-  text: string;
+  text?: string;
+  image?: string | null;
   createdAt: number;
 }
 
@@ -391,6 +392,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const [chatVisible, setChatVisible] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const ws = useRef<WebSocket | null>(null);
@@ -425,19 +427,32 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   }, [messages]);
 
   const handleSend = () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() && !imageFile) return;
     const tempId = crypto.randomUUID();
-    const messageToSend: Message & { type: string } = {
-      type: "message",
-      sender: username,
-      text: newMessage,
-      createdAt: Date.now(),
-      id: tempId,
+
+    const sendMessage = (imgData?: string) => {
+      const messageToSend: Message & { type: string } = {
+        type: "message",
+        sender: username,
+        text: newMessage || "",
+        image: imgData || null,
+        createdAt: Date.now(),
+        id: tempId,
+      };
+      setMessages(prev => [...prev, messageToSend]);
+      setNewMessage("");
+      setImageFile(null);
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify(messageToSend));
+      }
     };
-    setMessages(prev => [...prev, messageToSend]);
-    setNewMessage("");
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify(messageToSend));
+
+    if (imageFile) {
+      const reader = new FileReader();
+      reader.onload = () => sendMessage(reader.result as string);
+      reader.readAsDataURL(imageFile);
+    } else {
+      sendMessage();
     }
   };
 
@@ -465,7 +480,8 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
                       <div className="message-content">
                         {!isMe && <div className="sender-name">{msg.sender}</div>}
                         <div className={`message ${isMe ? "me" : msg.sender}`}>
-                          <div>{msg.text}</div>
+                          {msg.text && <div>{msg.text}</div>}
+                          {msg.image && <img src={msg.image} alt="sent" className="chat-image" />}
                           <span className="timestamp">{formatTime(msg.createdAt)}</span>
                         </div>
                       </div>
@@ -474,19 +490,44 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
                 })}
                 <div ref={chatEndRef}></div>
               </div>
+
+              {/* Chat Input Box */}
               <div className="input-box">
-                <input type="text" placeholder="Type a message..." value={newMessage}
+                {/* Camera button */}
+                <label htmlFor="imageUpload" className="camera-btn" title="Send Image">📸</label>
+                <input
+                  type="file"
+                  id="imageUpload"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setImageFile(file);
+                  }}
+                />
+
+                {/* Text input */}
+                <input
+                  type="text"
+                  placeholder="Type a message..."
+                  value={newMessage}
                   onChange={(e) => {
                     setNewMessage(e.target.value);
                     ws.current?.send(JSON.stringify({ type: "typing", sender: username }));
                   }}
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()} />
+                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                />
+
+                {/* Send button */}
                 <button onClick={handleSend}>Send</button>
               </div>
             </div>
           )}
           {!chatVisible && (
-            <button onClick={() => setChatVisible(true)} style={{ margin: 10, padding: "8px 12px", borderRadius: 8, background: "#007bff", color: "#fff" }}>
+            <button
+              onClick={() => setChatVisible(true)}
+              style={{ margin: 10, padding: "8px 12px", borderRadius: 8, background: "#007bff", color: "#fff" }}
+            >
               .-.
             </button>
           )}

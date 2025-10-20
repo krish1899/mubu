@@ -28,26 +28,23 @@ const TELEGRAM_CHAT_ID2 = process.env.TELEGRAM_CHAT_ID2;
 
 async function sendTelegramRandomPic() {
   const picUrl = `https://picsum.photos/400?random=${Math.floor(Math.random() * 1000)}`;
-  const recipients = [process.env.TELEGRAM_CHAT_ID, process.env.TELEGRAM_CHAT_ID2];
+  const recipients = [TELEGRAM_CHAT_ID, TELEGRAM_CHAT_ID2];
 
   try {
-    for (let id of recipients) {
-      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: id,
-          photo: picUrl,
-          caption: "new picture for you! 📸",
-        }),
-      });
-    }
+    await Promise.all(
+      recipients.map(id =>
+        fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: id, photo: picUrl, caption: "new picture for you! 📸" }),
+        })
+      )
+    );
     console.log("✅ Sent Telegram random pic to both users");
   } catch (err) {
     console.error("❌ Telegram send error:", err);
   }
 }
-
 
 // ---------------------- WEBSOCKET CHAT ----------------------
 const MESSAGE_LIST = "chat_messages";
@@ -55,21 +52,19 @@ let activeUsers = new Set();
 
 const wss = new WebSocket.Server({ server });
 
-// Broadcast to all clients
+// Broadcast to all connected clients
 function broadcast(msg) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) client.send(msg);
   });
 }
 
-// Send last 5 messages to newly connected client
+// Send last 5 messages to a newly connected client
 async function sendLastMessages(ws) {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -5, -1);
     lastMessages.forEach(msg => {
-      try {
-        ws.send(typeof msg === "string" ? msg : JSON.stringify(msg));
-      } catch {}
+      try { ws.send(typeof msg === "string" ? msg : JSON.stringify(msg)); } catch {}
     });
   } catch (err) {
     console.error("❌ Failed to fetch messages:", err);
@@ -79,16 +74,14 @@ async function sendLastMessages(ws) {
 // ---------------------- WEBSOCKET CONNECTION ----------------------
 wss.on("connection", async (ws) => {
   console.log("👤 New client connected");
-
   await sendLastMessages(ws);
 
   ws.on("message", async (raw) => {
     try {
       const parsed = JSON.parse(raw.toString());
-
       if (parsed.type === "ping") return;
 
-      // ---------------- User login ----------------
+      // User login
       if (parsed.type === "login") {
         ws.username = parsed.username;
         activeUsers.add(parsed.username);
@@ -96,36 +89,29 @@ wss.on("connection", async (ws) => {
         return;
       }
 
-      // ---------------- Typing indicator ----------------
+      // Typing indicator
       if (parsed.type === "typing") {
         broadcast(JSON.stringify({ type: "typing", sender: parsed.sender }));
         return;
       }
 
-      // ---------------- Chat message ----------------
+      // Chat message (text + optional image)
       if (parsed.type === "message") {
         const msgObj = {
           type: "message",
           id: parsed.id || uuidv4(),
           sender: parsed.sender,
-          text: parsed.text,
+          text: parsed.text || "",
+          image: parsed.image || null, // <-- image support
           createdAt: parsed.createdAt || Date.now(),
         };
 
         const msgString = JSON.stringify(msgObj);
-
-        // Save to Redis
         await redis.rpush(MESSAGE_LIST, msgString);
         await redis.ltrim(MESSAGE_LIST, -500, -1);
-
-        // Broadcast to all users
         broadcast(msgString);
 
-        // Send Telegram pic only if <2 users online
-        if (activeUsers.size < 2) {
-          sendTelegramRandomPic();
-        }
-
+        if (activeUsers.size < 2) sendTelegramRandomPic(); // fire-and-forget
         return;
       }
     } catch (err) {
@@ -133,7 +119,7 @@ wss.on("connection", async (ws) => {
     }
   });
 
-  // ---------------- Handle disconnect ----------------
+  // Handle disconnect
   ws.on("close", () => {
     if (ws.username) {
       activeUsers.delete(ws.username);
