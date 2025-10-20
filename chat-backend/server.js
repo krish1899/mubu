@@ -24,24 +24,30 @@ const redis = new Redis({
 // ---------------------- TELEGRAM BOT ----------------------
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_CHAT_ID2 = process.env.TELEGRAM_CHAT_ID2;
 
 async function sendTelegramRandomPic() {
   const picUrl = `https://picsum.photos/400?random=${Math.floor(Math.random() * 1000)}`;
+  const recipients = [process.env.TELEGRAM_CHAT_ID, process.env.TELEGRAM_CHAT_ID2];
+
   try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        photo: picUrl,
-        caption: "new picture for you! 📸",
-      }),
-    });
-    console.log("✅ Sent Telegram random pic");
+    for (let id of recipients) {
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: id,
+          photo: picUrl,
+          caption: "new picture for you! 📸",
+        }),
+      });
+    }
+    console.log("✅ Sent Telegram random pic to both users");
   } catch (err) {
     console.error("❌ Telegram send error:", err);
   }
 }
+
 
 // ---------------------- WEBSOCKET CHAT ----------------------
 const MESSAGE_LIST = "chat_messages";
