@@ -64,7 +64,12 @@ async function sendLastMessages(ws) {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -5, -1);
     lastMessages.forEach(msg => {
-      try { ws.send(typeof msg === "string" ? msg : JSON.stringify(msg)); } catch {}
+      try {
+        const parsedMsg = typeof msg === "string" ? JSON.parse(msg) : msg;
+        ws.send(JSON.stringify(parsedMsg));
+      } catch (err) {
+        console.error("❌ Failed to parse/send message:", msg, err);
+      }
     });
   } catch (err) {
     console.error("❌ Failed to fetch messages:", err);
@@ -108,10 +113,11 @@ wss.on("connection", async (ws) => {
 
         const msgString = JSON.stringify(msgObj);
         await redis.rpush(MESSAGE_LIST, msgString);
-        await redis.ltrim(MESSAGE_LIST, -500, -1);
+        await redis.ltrim(MESSAGE_LIST, -500, -1); // keep last 500 messages
         broadcast(msgString);
 
-        if (activeUsers.size < 2) sendTelegramRandomPic(); // fire-and-forget
+        // If only 1 user is online, send Telegram random pic
+        if (activeUsers.size < 2) sendTelegramRandomPic();
         return;
       }
     } catch (err) {

@@ -18,7 +18,6 @@ const PASSWORDS: { [key: string]: string } = {
 // Picsum image helper
 const getNewsImage = (seed: number) => `https://picsum.photos/seed/${seed}/400/250`;
 
-// Sample news data
 const NEWS_DATA = [
   { 
     title: "Global Markets See Sudden Dip After Central Bank Rate Decision", 
@@ -337,13 +336,11 @@ const NEWS_DATA = [
   }
 ];
 
-// ----------------- NewsFeed Component -----------------
 function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, setAuthenticated }: any) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu if clicked outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -384,7 +381,6 @@ function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, setAuthentic
   );
 }
 
-// ----------------- NewsDetail Component -----------------
 function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const { id } = useParams();
   const idx = Number(id);
@@ -394,6 +390,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const [newMessage, setNewMessage] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const ws = useRef<WebSocket | null>(null);
 
@@ -414,7 +411,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
           setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
         }
         if (msg.type === "typing" && msg.sender !== username) {
-          setTypingUser(msg.sender);
+          setTypingUser(msg.sender ?? null); // <-- FIX for TS 2345
           setTimeout(() => setTypingUser(null), 2000);
         }
       } catch {}
@@ -465,81 +462,83 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
       <h2>{sessionNews[idx].title}</h2>
       <p>{sessionNews[idx].content}</p>
 
-      {idx === 8 ? (
-        <>
-          {chatVisible && (
-            <div className="chat-container">
-              <button className="chat-hide-btn" onClick={() => setChatVisible(false)}>×</button>
-              <div className="chat-box">
-                {typingUser && <div className="typing-indicator">{typingUser} is typing...</div>}
-                {messages.map(msg => {
-                  const isMe = msg.sender === username;
-                  return (
-                    <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
-                      {!isMe && <div className="avatar message-avatar">{msg.sender[0].toUpperCase()}</div>}
-                      <div className="message-content">
-                        {!isMe && <div className="sender-name">{msg.sender}</div>}
-                        <div className={`message ${isMe ? "me" : msg.sender}`}>
-                          {msg.text && <div>{msg.text}</div>}
-                          {msg.image && <img src={msg.image} alt="sent" className="chat-image" />}
-                          <span className="timestamp">{formatTime(msg.createdAt)}</span>
-                        </div>
-                      </div>
+      {idx === 8 && chatVisible && (
+        <div className="chat-container">
+          <button className="chat-hide-btn" onClick={() => setChatVisible(false)}>×</button>
+          <div className="chat-box">
+            {typingUser && <div className="typing-indicator">{typingUser} is typing...</div>}
+            {messages.map(msg => {
+              const isMe = msg.sender === username;
+              return (
+                <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
+                  {!isMe && <div className="avatar message-avatar">{msg.sender[0].toUpperCase()}</div>}
+                  <div className="message-content">
+                    {!isMe && <div className="sender-name">{msg.sender}</div>}
+                    <div className={`message ${isMe ? "me" : msg.sender}`}>
+                      {msg.text && <div>{msg.text}</div>}
+                      {msg.image && (
+                        <img
+                          src={msg.image}
+                          alt="sent"
+                          className="chat-image"
+                          onClick={() => msg.image && setEnlargedImage(msg.image)}
+                        />
+                      )}
+                      <span className="timestamp">{formatTime(msg.createdAt)}</span>
                     </div>
-                  );
-                })}
-                <div ref={chatEndRef}></div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={chatEndRef}></div>
+          </div>
+
+          <div className="input-box">
+            <input
+              type="text"
+              placeholder="Type a message..."
+              value={newMessage}
+              onChange={(e) => {
+                setNewMessage(e.target.value);
+                ws.current?.send(JSON.stringify({ type: "typing", sender: username }));
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleSend()}
+            />
+
+            <label htmlFor="imageUpload" className="camera-btn" title="Send Image">📸</label>
+            <input
+              type="file"
+              id="imageUpload"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setImageFile(file);
+              }}
+            />
+
+            {imageFile && (
+              <div className="image-preview">
+                <img src={URL.createObjectURL(imageFile)} alt="preview" />
+                <button className="remove-preview" onClick={() => setImageFile(null)}>×</button>
               </div>
+            )}
 
-              {/* Chat Input Box */}
-              <div className="input-box">
-                {/* Camera button */}
-                <label htmlFor="imageUpload" className="camera-btn" title="Send Image">📸</label>
-                <input
-                  type="file"
-                  id="imageUpload"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) setImageFile(file);
-                  }}
-                />
+            <button onClick={handleSend}>Send</button>
+          </div>
+        </div>
+      )}
 
-                {/* Text input */}
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  value={newMessage}
-                  onChange={(e) => {
-                    setNewMessage(e.target.value);
-                    ws.current?.send(JSON.stringify({ type: "typing", sender: username }));
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                />
-
-                {/* Send button */}
-                <button onClick={handleSend}>Send</button>
-              </div>
-            </div>
-          )}
-          {!chatVisible && (
-            <button
-              onClick={() => setChatVisible(true)}
-              style={{ margin: 10, padding: "8px 12px", borderRadius: 8, background: "#007bff", color: "#fff" }}
-            >
-              .-.
-            </button>
-          )}
-        </>
-      ) : (
-        <p>Source: news Agency</p>
+      {enlargedImage && (
+        <div className="modal" onClick={() => setEnlargedImage(null)}>
+          <img src={enlargedImage} alt="enlarged" className="modal-image" />
+        </div>
       )}
     </div>
   );
 }
 
-// ----------------- Main App -----------------
 function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [username, setUsername] = useState("");
