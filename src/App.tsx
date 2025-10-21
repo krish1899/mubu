@@ -391,7 +391,6 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const idx = Number(id);
   const navigate = useNavigate();
 
-  // UI state
   const [chatVisible, setChatVisible] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -402,13 +401,11 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [replyTo, setReplyTo] = useState<ReplyInfo | null>(null);
 
-  // Refs
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const fileInputCameraRef = useRef<HTMLInputElement | null>(null);
   const fileInputGalleryRef = useRef<HTMLInputElement | null>(null);
 
-  // swipe refs for reply (sliding left)
   const swipeStartX = useRef<number | null>(null);
   const swipeTargetId = useRef<string | undefined>(undefined);
   const isPointerDownRef = useRef(false);
@@ -496,7 +493,6 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const openCamera = () => { setShowMediaMenu(false); fileInputCameraRef.current?.click(); };
   const openGallery = () => { setShowMediaMenu(false); fileInputGalleryRef.current?.click(); };
 
-  // Swipe-to-reply handlers
   const handlePointerDown = (e: React.PointerEvent, msgId?: string) => {
     swipeStartX.current = e.clientX;
     swipeTargetId.current = msgId;
@@ -505,7 +501,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
     if (el) el.classList.add("swiping");
     try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
   };
-  const handlePointerMove = (_e: React.PointerEvent) => { /* optional visual feedback */ };
+  const handlePointerMove = (_e: React.PointerEvent) => {};
   const handlePointerUp = (e: React.PointerEvent, msg?: Message) => {
     const el = swipeTargetId.current ? document.getElementById(`msg-${swipeTargetId.current}`) : null;
     if (el) el.classList.remove("swiping");
@@ -576,6 +572,18 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
                         )}
                       </div>
                     </div>
+
+                    {/* DELETE BUTTON */}
+                    {isMe && (
+                      <button
+                        className="delete-btn"
+                        onClick={() => setMessages((prev) => prev.filter((m) => m.id !== msg.id))}
+                        title="Delete message"
+                      >
+                        🚮
+                      </button>
+                    )}
+
                     <div className={`message-time ${isMe ? "time-right" : "time-left"}`}>{formatTime(msg.createdAt)}</div>
                   </div>
                 </div>
