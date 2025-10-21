@@ -393,6 +393,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const { id } = useParams();
   const idx = Number(id);
   const navigate = useNavigate();
+  const isPrivateChatCard = idx === 8; // because 9th card is index 8
 
   const [chatVisible, setChatVisible] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -537,158 +538,157 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
       <h2>{sessionNews[idx].title}</h2>
       <p>{sessionNews[idx].content}</p>
 
-      {!chatVisible && (
-        <div className="chat-unhide-wrap-inline">
-          <button className="chat-unhide-btn" onClick={() => setChatVisible(true)} title="Unhide chat">🔓</button>
-        </div>
-      )}
+      {isPrivateChatCard && (<>
+        {!chatVisible && (
+          <div className="chat-unhide-wrap-inline">
+            <button className="chat-unhide-btn" onClick={() => setChatVisible(true)} title="Unhide chat">🔓</button>
+          </div>
+        )}
+        {chatVisible && (
+          <div className="chat-container">
+            <button className="chat-hide-btn" onClick={() => setChatVisible(false)} title="Hide chat">🔒</button>
+            <div className="chat-box">
+              {typingUser && <div className="typing-indicator">{typingUser} is typing...</div>}
 
-      {chatVisible && (
-        <div className="chat-container">
-          <button className="chat-hide-btn" onClick={() => setChatVisible(false)} title="Hide chat">🔒</button>
-          <div className="chat-box">
-            {typingUser && <div className="typing-indicator">{typingUser} is typing...</div>}
+              {messages.map((msg) => {
+                const isMe = msg.sender === username;
+                if (!shouldRenderMessage(msg)) return null;
 
-            {messages.map((msg) => {
-              const isMe = msg.sender === username;
-              if (!shouldRenderMessage(msg)) return null;
-
-              return (
-                <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
-                  {!isMe && (<div className={`avatar message-avatar ${onlineUsers.includes(msg.sender) ? "online" : ""}`}>
-                    {msg.sender[0].toUpperCase()}
-                  </div>
-                  )}
-                  <div className="message-content-wrapper">
-                    <div className="message-content">
-                      {msg.replyTo && msg.replyTo.text && (
-                        <div className="reply-preview-inside">
-                          <div className="reply-bar" />
-                          <div className="reply-text">{msg.replyTo.text}</div>
-                        </div>
-                      )}
-
-                      <div className={`message ${isMe ? "me" : msg.sender}`}>
-                        {msg.text && <div>{msg.text}</div>}
-                        {msg.image && (
-                          <img
-                            src={msg.image ?? undefined}
-                            alt="sent"
-                            className="chat-image"
-                            onClick={() => setEnlargedImage(msg.image ?? null)}
-                          />
+                return (
+                  <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
+                    {!isMe && (<div className={`avatar message-avatar ${onlineUsers.includes(msg.sender) ? "online" : ""}`}>
+                      {msg.sender[0].toUpperCase()}
+                    </div>
+                    )}
+                    <div className="message-content-wrapper">
+                      <div className="message-content">
+                        {msg.replyTo && msg.replyTo.text && (
+                          <div className="reply-preview-inside">
+                            <div className="reply-bar" />
+                            <div className="reply-text">{msg.replyTo.text}</div>
+                          </div>
                         )}
-                      </div>
 
-                      <div className="message-buttons-wrapper">
-                        {isMe && (
-                        <div className="left-buttons">
-                          <button
-                            className="edit-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingMessageId(msg.id ?? null);
-                              setNewMessage(msg.text ?? "");
-                              if (msg.image) setPreviewUrl(msg.image);
-                            }}
-                            title="Edit"
-                          >✏️</button>
-                          <button
-                            className="delete-btn"
-                            onClick={() => setMessages((prev) => prev.filter((m) => m.id !== msg.id))}
-                            title="Delete"
-                          >🚮</button>
+                        <div className={`message ${isMe ? "me" : msg.sender}`}>
+                          {msg.text && <div>{msg.text}</div>}
+                          {msg.image && (
+                            <img
+                              src={msg.image ?? undefined}
+                              alt="sent"
+                              className="chat-image"
+                              onClick={() => setEnlargedImage(msg.image ?? null)}
+                            />
+                          )}
                         </div>
-                        )}
-                        <div className="right-buttons">
-                          <button
-                            className="reply-btn"
-                            onClick={() => setReplyTo({ id: msg.id, text: msg.text ?? (msg.image ? "Image" : "") })}
-                            title="Reply"
-                          >↩️</button>
-                        </div>
-                      </div>
 
-                      <div className={`message-time ${isMe ? "time-right" : "time-left"}`}>{formatTime(msg.createdAt)}</div>
+                        <div className="message-buttons-wrapper">
+                          {isMe && (
+                          <div className="left-buttons">
+                            <button
+                              className="edit-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingMessageId(msg.id ?? null);
+                                setNewMessage(msg.text ?? "");
+                                if (msg.image) setPreviewUrl(msg.image);
+                              }}
+                              title="Edit"
+                            >✏️</button>
+                            <button
+                              className="delete-btn"
+                              onClick={() => setMessages((prev) => prev.filter((m) => m.id !== msg.id))}
+                              title="Delete"
+                            >🚮</button>
+                          </div>
+                          )}
+                          <div className="right-buttons">
+                            <button
+                              className="reply-btn"
+                              onClick={() => setReplyTo({ id: msg.id, text: msg.text ?? (msg.image ? "Image" : "") })}
+                              title="Reply"
+                            >↩️</button>
+                          </div>
+                        </div>
+
+                        <div className={`message-time ${isMe ? "time-right" : "time-left"}`}>{formatTime(msg.createdAt)}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
 
-            <div ref={chatEndRef} />
-          </div>
-
-          {replyTo && replyTo.text && (
-            <div className="replying-bar">
-              <div className="replying-text">{replyTo.text}</div>
-              <button className="reply-cancel" onClick={() => setReplyTo(null)} title="Cancel reply">×</button>
+              <div ref={chatEndRef} />
             </div>
-          )}
 
-          <div className="input-area">
-            <div className="input-box" onClick={() => setShowMediaMenu(false)}>
-              {previewUrl && (
-                <div className="image-preview">
-                  <img src={previewUrl} alt="preview" />
-                  <button
-                    className="remove-preview"
-                    onClick={() => { try { URL.revokeObjectURL(previewUrl); } catch {} setImageFile(null); setPreviewUrl(null); }}
-                    title="Remove"
-                  >×</button>
-                </div>
-              )}
-              <input
-                type="text"
-                placeholder="Type a message..."
-                value={newMessage}
-                onChange={(e) => { setNewMessage(e.target.value); ws.current?.send(JSON.stringify({ type: "typing", sender: username })); }}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              />
-              <div className="input-icons">
-                <div
-                  className="camera-btn"
-                  onClick={(e) => { e.stopPropagation(); setShowMediaMenu((s) => !s); }}
-                  title="Choose image"
-                >📸</div>
-                {showMediaMenu && (
-                  <div className="media-bubble" onClick={(e) => e.stopPropagation()}>
-                    <div className="media-item" onClick={openCamera}>📸 Camera</div>
-                    <div className="media-item" onClick={openGallery}>🖼️ Gallery</div>
+            {replyTo && replyTo.text && (
+              <div className="replying-bar">
+                <div className="replying-text">{replyTo.text}</div>
+                <button className="reply-cancel" onClick={() => setReplyTo(null)} title="Cancel reply">×</button>
+              </div>
+            )}
+
+            <div className="input-area">
+              <div className="input-box" onClick={() => setShowMediaMenu(false)}>
+                {previewUrl && (
+                  <div className="image-preview">
+                    <img src={previewUrl} alt="preview" />
+                    <button
+                      className="remove-preview"
+                      onClick={() => { try { URL.revokeObjectURL(previewUrl); } catch {} setImageFile(null); setPreviewUrl(null); }}
+                      title="Remove"
+                    >×</button>
                   </div>
                 )}
-                <button className="send-btn" onClick={handleSend} title="Send">🚀</button>
+                <input
+                  type="text"
+                  placeholder="Type a message..."
+                  value={newMessage}
+                  onChange={(e) => { setNewMessage(e.target.value); ws.current?.send(JSON.stringify({ type: "typing", sender: username })); }}
+                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                />
+                <div className="input-icons">
+                  <div
+                    className="camera-btn"
+                    onClick={(e) => { e.stopPropagation(); setShowMediaMenu((s) => !s); }}
+                    title="Choose image"
+                  >📸</div>
+                  {showMediaMenu && (
+                    <div className="media-bubble" onClick={(e) => e.stopPropagation()}>
+                      <div className="media-item" onClick={openCamera}>📸 Camera</div>
+                      <div className="media-item" onClick={openGallery}>🖼️ Gallery</div>
+                    </div>
+                  )}
+                  <button className="send-btn" onClick={handleSend} title="Send">🚀</button>
+                </div>
               </div>
+
+              <input
+                ref={fileInputCameraRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: "none" }}
+                onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
+              />
+              <input
+                ref={fileInputGalleryRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
+              />
             </div>
-
-            <input
-              ref={fileInputCameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              style={{ display: "none" }}
-              onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
-            />
-            <input
-              ref={fileInputGalleryRef}
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
-            />
           </div>
-        </div>
+        )}
+      </>
       )}
-
-      {enlargedImage && (
-        <div className="modal" onClick={() => setEnlargedImage(null)}>
-          <img src={enlargedImage} alt="enlarged" className="modal-image" />
-        </div>
-      )}
-    </div>
-  );
+        {enlargedImage && (
+          <div className="modal" onClick={() => setEnlargedImage(null)}>
+            <img src={enlargedImage} alt="enlarged" className="modal-image" />
+          </div>
+        )}
+      </div>  );
 }
-
 function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [username, setUsername] = useState("");
