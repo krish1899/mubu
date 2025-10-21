@@ -1,3 +1,4 @@
+// App.tsx
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from "react-router-dom";
 import "./App.css";
@@ -24,7 +25,7 @@ const PASSWORDS: { [key: string]: string } = {
 // Picsum image helper
 const getNewsImage = (seed: number) => `https://picsum.photos/seed/${seed}/400/250`;
 
-// placeholder — you'll add actual NEWS_DATA
+// placeholder NEWS_DATA
 const NEWS_DATA = [
   { 
     title: "Global Markets See Sudden Dip After Central Bank Rate Decision", 
@@ -343,6 +344,8 @@ const NEWS_DATA = [
   }
 ];
 
+
+
 function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, setAuthenticated }: any) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
@@ -400,15 +403,34 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [replyTo, setReplyTo] = useState<ReplyInfo | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const fileInputCameraRef = useRef<HTMLInputElement | null>(null);
   const fileInputGalleryRef = useRef<HTMLInputElement | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
-  const swipeStartX = useRef<number | null>(null);
-  const swipeTargetId = useRef<string | undefined>(undefined);
-  const isPointerDownRef = useRef(false);
+  useEffect(() => {
+    ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com");
+    ws.current.onopen = () => ws.current?.send(JSON.stringify({ type: "login", username }));
+    ws.current.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data);
+        if (parsed.type === "online-users") {
+          setOnlineUsers(parsed.users); // assume server sends array of online usernames
+        }
+        if (parsed.type === "message") {
+          setMessages((prev) => (prev.some((m) => m.id === parsed.id) ? prev : [...prev, parsed]));
+        }
+        if (parsed.type === "typing" && parsed.sender !== username) {
+          setTypingUser(parsed.sender);
+          setTimeout(() => setTypingUser(null), 2000);
+        }
+      } catch {}
+    };
+    return () => ws.current?.close();
+  }, [username]);
 
   useEffect(() => {
     ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com");
@@ -440,8 +462,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
     let hours = date.getHours();
     const minutes = date.getMinutes().toString().padStart(2, "0");
     const ampm = hours >= 12 ? "PM" : "AM";
-    hours = hours % 12;
-    if (hours === 0) hours = 12;
+    hours = hours % 12 || 12;
     return `${hours}:${minutes} ${ampm}`;
   };
 
@@ -452,23 +473,38 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
     const doSend = (imgData?: string | null) => {
       const messageToSend: Message & { type: string } = {
         type: "message",
-        id: tempId,
+        id: editingMessageId ?? tempId,
         sender: username,
         text: newMessage.trim() ? newMessage.trim() : null,
         image: imgData ?? null,
-        createdAt: Date.now(),
+        createdAt: editingMessageId
+          ? messages.find((m) => m.id === editingMessageId)?.createdAt || Date.now()
+          : Date.now(),
         replyTo: replyTo ?? null,
       };
 
-      setMessages((prev) => [...prev, messageToSend]);
+      if (editingMessageId) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === editingMessageId ? { ...m, text: messageToSend.text, image: messageToSend.image } : m
+          )
+        );
+        setEditingMessageId(null);
+      } else {
+        setMessages((prev) => [...prev, messageToSend]);
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify(messageToSend));
+        }
+      }
+
       setNewMessage("");
       setImageFile(null);
-      if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
-      setReplyTo(null);
-
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify(messageToSend));
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
       }
+      setReplyTo(null);
+      setShowMediaMenu(false);
     };
 
     if (imageFile) {
@@ -478,7 +514,6 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
     } else {
       doSend(null);
     }
-    setShowMediaMenu(false);
   };
 
   const onFileSelected = (file?: File | null) => {
@@ -492,32 +527,6 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
 
   const openCamera = () => { setShowMediaMenu(false); fileInputCameraRef.current?.click(); };
   const openGallery = () => { setShowMediaMenu(false); fileInputGalleryRef.current?.click(); };
-
-  const handlePointerDown = (e: React.PointerEvent, msgId?: string) => {
-    swipeStartX.current = e.clientX;
-    swipeTargetId.current = msgId;
-    isPointerDownRef.current = true;
-    const el = msgId ? document.getElementById(`msg-${msgId}`) : null;
-    if (el) el.classList.add("swiping");
-    try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
-  };
-  const handlePointerMove = (_e: React.PointerEvent) => {};
-  const handlePointerUp = (e: React.PointerEvent, msg?: Message) => {
-    const el = swipeTargetId.current ? document.getElementById(`msg-${swipeTargetId.current}`) : null;
-    if (el) el.classList.remove("swiping");
-
-    if (!isPointerDownRef.current || swipeStartX.current === null) {
-      swipeStartX.current = null; swipeTargetId.current = undefined; isPointerDownRef.current = false;
-      return;
-    }
-    const dx = e.clientX - swipeStartX.current;
-    if (dx < -60 && msg) {
-      const replyText = msg.text ?? (msg.image ? "Image" : "");
-      setReplyTo({ id: msg.id, text: replyText ?? "" });
-    }
-    swipeStartX.current = null; swipeTargetId.current = undefined; isPointerDownRef.current = false;
-    try { (e.target as Element).releasePointerCapture(e.pointerId); } catch {}
-  };
 
   const shouldRenderMessage = (m: Message) => Boolean((m.text && m.text.trim()) || m.image);
 
@@ -534,24 +543,22 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
         </div>
       )}
 
-      {idx === 8 && chatVisible && (
+      {chatVisible && (
         <div className="chat-container">
           <button className="chat-hide-btn" onClick={() => setChatVisible(false)} title="Hide chat">🔒</button>
           <div className="chat-box">
             {typingUser && <div className="typing-indicator">{typingUser} is typing...</div>}
+
             {messages.map((msg) => {
               const isMe = msg.sender === username;
               if (!shouldRenderMessage(msg)) return null;
+
               return (
-                <div
-                  key={msg.id}
-                  id={`msg-${msg.id}`}
-                  className={`message-group ${isMe ? "me" : msg.sender}`}
-                  onPointerDown={(e) => handlePointerDown(e, msg.id)}
-                  onPointerMove={(e) => handlePointerMove(e)}
-                  onPointerUp={(e) => handlePointerUp(e, msg)}
-                >
-                  {!isMe && <div className="avatar message-avatar">{msg.sender[0].toUpperCase()}</div>}
+                <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
+                  {!isMe && (<div className={`avatar message-avatar ${onlineUsers.includes(msg.sender) ? "online" : ""}`}>
+                    {msg.sender[0].toUpperCase()}
+                  </div>
+                  )}
                   <div className="message-content-wrapper">
                     <div className="message-content">
                       {msg.replyTo && msg.replyTo.text && (
@@ -560,6 +567,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
                           <div className="reply-text">{msg.replyTo.text}</div>
                         </div>
                       )}
+
                       <div className={`message ${isMe ? "me" : msg.sender}`}>
                         {msg.text && <div>{msg.text}</div>}
                         {msg.image && (
@@ -571,24 +579,43 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
                           />
                         )}
                       </div>
+
+                      <div className="message-buttons-wrapper">
+                        {isMe && (
+                        <div className="left-buttons">
+                          <button
+                            className="edit-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingMessageId(msg.id ?? null);
+                              setNewMessage(msg.text ?? "");
+                              if (msg.image) setPreviewUrl(msg.image);
+                            }}
+                            title="Edit"
+                          >✏️</button>
+                          <button
+                            className="delete-btn"
+                            onClick={() => setMessages((prev) => prev.filter((m) => m.id !== msg.id))}
+                            title="Delete"
+                          >🚮</button>
+                        </div>
+                        )}
+                        <div className="right-buttons">
+                          <button
+                            className="reply-btn"
+                            onClick={() => setReplyTo({ id: msg.id, text: msg.text ?? (msg.image ? "Image" : "") })}
+                            title="Reply"
+                          >↩️</button>
+                        </div>
+                      </div>
+
+                      <div className={`message-time ${isMe ? "time-right" : "time-left"}`}>{formatTime(msg.createdAt)}</div>
                     </div>
-
-                    {/* DELETE BUTTON */}
-                    {isMe && (
-                      <button
-                        className="delete-btn"
-                        onClick={() => setMessages((prev) => prev.filter((m) => m.id !== msg.id))}
-                        title="Delete message"
-                      >
-                        🚮
-                      </button>
-                    )}
-
-                    <div className={`message-time ${isMe ? "time-right" : "time-left"}`}>{formatTime(msg.createdAt)}</div>
                   </div>
                 </div>
               );
             })}
+
             <div ref={chatEndRef} />
           </div>
 
@@ -618,7 +645,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
                 onChange={(e) => { setNewMessage(e.target.value); ws.current?.send(JSON.stringify({ type: "typing", sender: username })); }}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
               />
-              <div className="input-icons" style={{ position: "relative" }}>
+              <div className="input-icons">
                 <div
                   className="camera-btn"
                   onClick={(e) => { e.stopPropagation(); setShowMediaMenu((s) => !s); }}
