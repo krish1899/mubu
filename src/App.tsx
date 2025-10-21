@@ -1,13 +1,19 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from "react-router-dom";
 import "./App.css";
+
+interface ReplyInfo {
+  id?: string;
+  text?: string | null;
+}
 
 interface Message {
   id?: string;
   sender: string;
-  text?: string;
+  text?: string | null;
   image?: string | null;
   createdAt: number;
+  replyTo?: ReplyInfo | null;
 }
 
 const PASSWORDS: { [key: string]: string } = {
@@ -18,6 +24,7 @@ const PASSWORDS: { [key: string]: string } = {
 // Picsum image helper
 const getNewsImage = (seed: number) => `https://picsum.photos/seed/${seed}/400/250`;
 
+// placeholder — you'll add actual NEWS_DATA
 const NEWS_DATA = [
   { 
     title: "Global Markets See Sudden Dip After Central Bank Rate Decision", 
@@ -339,23 +346,21 @@ const NEWS_DATA = [
 function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, setAuthenticated }: any) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
   return (
     <>
       <div className="news-top-bar">
         Top News
-        <span className="menu-icon" onClick={() => setShowMenu(prev => !prev)}>☰</span>
+        <span className="menu-icon" onClick={() => setShowMenu((s) => !s)}>☰</span>
         {showMenu && (
           <div className="menu-dropdown" ref={menuRef}>
             <div onClick={() => { setAuthenticated(false); setShowMenu(false); }}>Logout</div>
@@ -385,33 +390,41 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const { id } = useParams();
   const idx = Number(id);
   const navigate = useNavigate();
+
+  // UI state
   const [chatVisible, setChatVisible] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const ws = useRef<WebSocket | null>(null);
+  const [showMediaMenu, setShowMediaMenu] = useState(false);
+  const [replyTo, setReplyTo] = useState<ReplyInfo | null>(null);
 
-  const formatTime = (ts: number) => {
-    const date = new Date(ts);
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = date.getMinutes().toString().padStart(2, "0");
-    return `${hours}:${minutes}`;
-  };
+  // Refs
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const ws = useRef<WebSocket | null>(null);
+  const fileInputCameraRef = useRef<HTMLInputElement | null>(null);
+  const fileInputGalleryRef = useRef<HTMLInputElement | null>(null);
+
+  // swipe refs for reply (sliding left)
+  const swipeStartX = useRef<number | null>(null);
+  const swipeTargetId = useRef<string | undefined>(undefined);
+  const isPointerDownRef = useRef(false);
 
   useEffect(() => {
     ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com");
     ws.current.onopen = () => ws.current?.send(JSON.stringify({ type: "login", username }));
     ws.current.onmessage = (event) => {
       try {
-        const msg: Message & { type: string } = JSON.parse(event.data);
-        if (msg.type === "message") {
-          setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+        const parsed = JSON.parse(event.data) as Message & { type?: string };
+        if (parsed.type === "message") {
+          setMessages((prev) => (prev.some((m) => m.id === parsed.id) ? prev : [...prev, parsed]));
         }
-        if (msg.type === "typing" && msg.sender !== username) {
-          setTypingUser(msg.sender ?? null); // <-- FIX for TS 2345
+        if ((parsed as any).type === "typing" && (parsed as any).sender !== username) {
+          const sender = (parsed as any).sender ?? null;
+          setTypingUser(sender);
           setTimeout(() => setTypingUser(null), 2000);
         }
       } catch {}
@@ -423,22 +436,39 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  if (!sessionNews[idx]) return <p>Invalid news item.</p>;
+
+  const formatTime = (ts: number) => {
+    const date = new Date(ts);
+    let hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    return `${hours}:${minutes} ${ampm}`;
+  };
+
   const handleSend = () => {
     if (!newMessage.trim() && !imageFile) return;
     const tempId = crypto.randomUUID();
 
-    const sendMessage = (imgData?: string) => {
+    const doSend = (imgData?: string | null) => {
       const messageToSend: Message & { type: string } = {
         type: "message",
-        sender: username,
-        text: newMessage || "",
-        image: imgData || null,
-        createdAt: Date.now(),
         id: tempId,
+        sender: username,
+        text: newMessage.trim() ? newMessage.trim() : null,
+        image: imgData ?? null,
+        createdAt: Date.now(),
+        replyTo: replyTo ?? null,
       };
-      setMessages(prev => [...prev, messageToSend]);
+
+      setMessages((prev) => [...prev, messageToSend]);
       setNewMessage("");
       setImageFile(null);
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
+      setReplyTo(null);
+
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify(messageToSend));
       }
@@ -446,14 +476,54 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
 
     if (imageFile) {
       const reader = new FileReader();
-      reader.onload = () => sendMessage(reader.result as string);
+      reader.onload = () => doSend(reader.result as string);
       reader.readAsDataURL(imageFile);
     } else {
-      sendMessage();
+      doSend(null);
     }
+    setShowMediaMenu(false);
   };
 
-  if (!sessionNews[idx]) return <p>Invalid news item.</p>;
+  const onFileSelected = (file?: File | null) => {
+    if (!file) return;
+    const objUrl = URL.createObjectURL(file);
+    if (previewUrl) try { URL.revokeObjectURL(previewUrl); } catch {}
+    setPreviewUrl(objUrl);
+    setImageFile(file);
+    setShowMediaMenu(false);
+  };
+
+  const openCamera = () => { setShowMediaMenu(false); fileInputCameraRef.current?.click(); };
+  const openGallery = () => { setShowMediaMenu(false); fileInputGalleryRef.current?.click(); };
+
+  // Swipe-to-reply handlers
+  const handlePointerDown = (e: React.PointerEvent, msgId?: string) => {
+    swipeStartX.current = e.clientX;
+    swipeTargetId.current = msgId;
+    isPointerDownRef.current = true;
+    const el = msgId ? document.getElementById(`msg-${msgId}`) : null;
+    if (el) el.classList.add("swiping");
+    try { (e.target as Element).setPointerCapture(e.pointerId); } catch {}
+  };
+  const handlePointerMove = (_e: React.PointerEvent) => { /* optional visual feedback */ };
+  const handlePointerUp = (e: React.PointerEvent, msg?: Message) => {
+    const el = swipeTargetId.current ? document.getElementById(`msg-${swipeTargetId.current}`) : null;
+    if (el) el.classList.remove("swiping");
+
+    if (!isPointerDownRef.current || swipeStartX.current === null) {
+      swipeStartX.current = null; swipeTargetId.current = undefined; isPointerDownRef.current = false;
+      return;
+    }
+    const dx = e.clientX - swipeStartX.current;
+    if (dx < -60 && msg) {
+      const replyText = msg.text ?? (msg.image ? "Image" : "");
+      setReplyTo({ id: msg.id, text: replyText ?? "" });
+    }
+    swipeStartX.current = null; swipeTargetId.current = undefined; isPointerDownRef.current = false;
+    try { (e.target as Element).releasePointerCapture(e.pointerId); } catch {}
+  };
+
+  const shouldRenderMessage = (m: Message) => Boolean((m.text && m.text.trim()) || m.image);
 
   return (
     <div className="news-detail">
@@ -462,70 +532,115 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
       <h2>{sessionNews[idx].title}</h2>
       <p>{sessionNews[idx].content}</p>
 
+      {!chatVisible && (
+        <div className="chat-unhide-wrap-inline">
+          <button className="chat-unhide-btn" onClick={() => setChatVisible(true)} title="Unhide chat">🔓</button>
+        </div>
+      )}
+
       {idx === 8 && chatVisible && (
         <div className="chat-container">
-          <button className="chat-hide-btn" onClick={() => setChatVisible(false)}>×</button>
+          <button className="chat-hide-btn" onClick={() => setChatVisible(false)} title="Hide chat">🔒</button>
           <div className="chat-box">
             {typingUser && <div className="typing-indicator">{typingUser} is typing...</div>}
-            {messages.map(msg => {
+            {messages.map((msg) => {
               const isMe = msg.sender === username;
+              if (!shouldRenderMessage(msg)) return null;
               return (
-                <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
+                <div
+                  key={msg.id}
+                  id={`msg-${msg.id}`}
+                  className={`message-group ${isMe ? "me" : msg.sender}`}
+                  onPointerDown={(e) => handlePointerDown(e, msg.id)}
+                  onPointerMove={(e) => handlePointerMove(e)}
+                  onPointerUp={(e) => handlePointerUp(e, msg)}
+                >
                   {!isMe && <div className="avatar message-avatar">{msg.sender[0].toUpperCase()}</div>}
-                  <div className="message-content">
-                    {!isMe && <div className="sender-name">{msg.sender}</div>}
-                    <div className={`message ${isMe ? "me" : msg.sender}`}>
-                      {msg.text && <div>{msg.text}</div>}
-                      {msg.image && (
-                        <img
-                          src={msg.image}
-                          alt="sent"
-                          className="chat-image"
-                          onClick={() => msg.image && setEnlargedImage(msg.image)}
-                        />
+                  <div className="message-content-wrapper">
+                    <div className="message-content">
+                      {msg.replyTo && msg.replyTo.text && (
+                        <div className="reply-preview-inside">
+                          <div className="reply-bar" />
+                          <div className="reply-text">{msg.replyTo.text}</div>
+                        </div>
                       )}
-                      <span className="timestamp">{formatTime(msg.createdAt)}</span>
+                      <div className={`message ${isMe ? "me" : msg.sender}`}>
+                        {msg.text && <div>{msg.text}</div>}
+                        {msg.image && (
+                          <img
+                            src={msg.image ?? undefined}
+                            alt="sent"
+                            className="chat-image"
+                            onClick={() => setEnlargedImage(msg.image ?? null)}
+                          />
+                        )}
+                      </div>
                     </div>
+                    <div className={`message-time ${isMe ? "time-right" : "time-left"}`}>{formatTime(msg.createdAt)}</div>
                   </div>
                 </div>
               );
             })}
-            <div ref={chatEndRef}></div>
+            <div ref={chatEndRef} />
           </div>
 
-          <div className="input-box">
-            <input
-              type="text"
-              placeholder="Type a message..."
-              value={newMessage}
-              onChange={(e) => {
-                setNewMessage(e.target.value);
-                ws.current?.send(JSON.stringify({ type: "typing", sender: username }));
-              }}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            />
+          {replyTo && replyTo.text && (
+            <div className="replying-bar">
+              <div className="replying-text">{replyTo.text}</div>
+              <button className="reply-cancel" onClick={() => setReplyTo(null)} title="Cancel reply">×</button>
+            </div>
+          )}
 
-            <label htmlFor="imageUpload" className="camera-btn" title="Send Image">📸</label>
+          <div className="input-area">
+            <div className="input-box" onClick={() => setShowMediaMenu(false)}>
+              {previewUrl && (
+                <div className="image-preview">
+                  <img src={previewUrl} alt="preview" />
+                  <button
+                    className="remove-preview"
+                    onClick={() => { try { URL.revokeObjectURL(previewUrl); } catch {} setImageFile(null); setPreviewUrl(null); }}
+                    title="Remove"
+                  >×</button>
+                </div>
+              )}
+              <input
+                type="text"
+                placeholder="Type a message..."
+                value={newMessage}
+                onChange={(e) => { setNewMessage(e.target.value); ws.current?.send(JSON.stringify({ type: "typing", sender: username })); }}
+                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+              />
+              <div className="input-icons" style={{ position: "relative" }}>
+                <div
+                  className="camera-btn"
+                  onClick={(e) => { e.stopPropagation(); setShowMediaMenu((s) => !s); }}
+                  title="Choose image"
+                >📸</div>
+                {showMediaMenu && (
+                  <div className="media-bubble" onClick={(e) => e.stopPropagation()}>
+                    <div className="media-item" onClick={openCamera}>📸 Camera</div>
+                    <div className="media-item" onClick={openGallery}>🖼️ Gallery</div>
+                  </div>
+                )}
+                <button className="send-btn" onClick={handleSend} title="Send">🚀</button>
+              </div>
+            </div>
+
             <input
+              ref={fileInputCameraRef}
               type="file"
-              id="imageUpload"
               accept="image/*"
               capture="environment"
               style={{ display: "none" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) setImageFile(file);
-              }}
+              onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
             />
-
-            {imageFile && (
-              <div className="image-preview">
-                <img src={URL.createObjectURL(imageFile)} alt="preview" />
-                <button className="remove-preview" onClick={() => setImageFile(null)}>×</button>
-              </div>
-            )}
-
-            <button onClick={handleSend}>Send</button>
+            <input
+              ref={fileInputGalleryRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
+            />
           </div>
         </div>
       )}
@@ -595,7 +710,7 @@ function App() {
                 sessionNews={sessionNews}
                 imageSeeds={imageSeeds}
                 username={username}
-                authenticated={authenticated}
+                authenticated={true}
                 setAuthenticated={setAuthenticated}
                 darkMode={darkMode}
                 setDarkMode={setDarkMode}
