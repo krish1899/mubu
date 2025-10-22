@@ -7,7 +7,6 @@ const { Redis } = require("@upstash/redis");
 const fetch = require("node-fetch");
 const bodyParser = require("body-parser");
 
-// ---------------------- APP SETUP ----------------------
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_URL, methods: ["GET", "POST"] }));
 app.use(bodyParser.json());
@@ -15,13 +14,11 @@ app.use(bodyParser.json());
 const PORT = process.env.PORT || 5050;
 const server = app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
-// ---------------------- REDIS ----------------------
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_URL,
   token: process.env.UPSTASH_REDIS_TOKEN,
 });
 
-// ---------------------- TELEGRAM BOT ----------------------
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const TELEGRAM_CHAT_ID2 = process.env.TELEGRAM_CHAT_ID2;
@@ -46,41 +43,29 @@ async function sendTelegramRandomPic() {
   }
 }
 
-// ---------------------- WEBSOCKET CHAT ----------------------
+// ---------------- WebSocket ----------------
 const MESSAGE_LIST = "chat_messages";
 let activeUsers = new Set();
 
 const wss = new WebSocket.Server({ server });
 
-// Broadcast to all connected clients
 function broadcast(msg) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) client.send(msg);
   });
 }
 
-// Send last 5 messages to a newly connected client
 async function sendLastMessages(ws) {
   try {
-    const lastMessages = await redis.lrange(MESSAGE_LIST, -5, -1);
-    // lastMessages are stored as JSON strings. Send them directly (no double-parse)
+    const lastMessages = await redis.lrange(MESSAGE_LIST, -10, -1);
     lastMessages.forEach(msgString => {
-      try { 
-        if (typeof msgString === "string") {
-          ws.send(msgString);
-        } else {
-          ws.send(JSON.stringify(msgString));
-        }
-      } catch (err) {
-        console.error("❌ Failed to send stored message:", err);
-      }
+      if (ws.readyState === WebSocket.OPEN) ws.send(msgString);
     });
   } catch (err) {
-    console.error("❌ Failed to fetch messages:", err);
+    console.error("❌ Failed to fetch/send messages:", err);
   }
 }
 
-// ---------------------- WEBSOCKET CONNECTION ----------------------
 wss.on("connection", async (ws) => {
   console.log("👤 New client connected");
   await sendLastMessages(ws);
@@ -90,52 +75,52 @@ wss.on("connection", async (ws) => {
       const parsed = JSON.parse(raw.toString());
       if (parsed.type === "ping") return;
 
-      // User login
+      // Login
       if (parsed.type === "login") {
         ws.username = parsed.username;
         activeUsers.add(parsed.username);
-        broadcast(JSON.stringify({ type: "online", users: [...activeUsers] }));
+        broadcast(JSON.stringify({ type: "online-users", users: [...activeUsers] }));
         return;
       }
 
-      // Typing indicator
+      // Typing
       if (parsed.type === "typing") {
         broadcast(JSON.stringify({ type: "typing", sender: parsed.sender }));
         return;
       }
 
-      // Chat message (text + optional image)
+      // Chat message
       if (parsed.type === "message") {
         const msgObj = {
           type: "message",
           id: parsed.id || uuidv4(),
           sender: parsed.sender,
-          // Note: allow empty string or null; keep as-is to preserve images-only messages
-          text: parsed.text === undefined || parsed.text === null ? "" : parsed.text,
-          image: parsed.image ?? null, // keep base64 or null
+          text: parsed.text ?? "",
+          image: parsed.image ?? null,
           createdAt: parsed.createdAt || Date.now(),
           replyTo: parsed.replyTo ?? null,
         };
 
         const msgString = JSON.stringify(msgObj);
         await redis.rpush(MESSAGE_LIST, msgString);
-        await redis.ltrim(MESSAGE_LIST, -500, -1); // keep last 500 messages
+        await redis.ltrim(MESSAGE_LIST, -500, -1);
         broadcast(msgString);
 
-        // If only 1 user is online, send Telegram random pic
-        if (activeUsers.size < 2) sendTelegramRandomPic();
+        // Telegram for solo user
+        if (activeUsers.size < 2) {
+          sendTelegramRandomPic().catch(err => console.error("Telegram error", err));
+        }
         return;
       }
     } catch (err) {
-      console.error("❌ WS Error:", err);
+      console.error("❌ WS error:", err);
     }
   });
 
-  // Handle disconnect
   ws.on("close", () => {
     if (ws.username) {
       activeUsers.delete(ws.username);
-      broadcast(JSON.stringify({ type: "online", users: [...activeUsers] }));
+      broadcast(JSON.stringify({ type: "online-users", users: [...activeUsers] }));
       console.log("👋 Disconnected:", ws.username);
     }
   });

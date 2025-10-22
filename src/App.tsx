@@ -1,4 +1,3 @@
-// App.tsx
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from "react-router-dom";
 import "./App.css";
@@ -344,8 +343,6 @@ const NEWS_DATA = [
   }
 ];
 
-
-
 function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, setAuthenticated }: any) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
@@ -358,6 +355,8 @@ function NewsFeed({ sessionNews, imageSeeds, darkMode, setDarkMode, setAuthentic
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
+  
+
 
   return (
     <>
@@ -393,7 +392,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const { id } = useParams();
   const idx = Number(id);
   const navigate = useNavigate();
-  const isPrivateChatCard = idx === 8; // because 9th card is index 8
+  const isPrivateChatCard = idx === 8; // 9th card index
 
   const [chatVisible, setChatVisible] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -405,56 +404,44 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [replyTo, setReplyTo] = useState<ReplyInfo | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-
+  const screenEndRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const fileInputCameraRef = useRef<HTMLInputElement | null>(null);
   const fileInputGalleryRef = useRef<HTMLInputElement | null>(null);
+  
+  const lastTypingRef = useRef<number>(0);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
+  // ---------- WebSocket ----------
   useEffect(() => {
     ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com");
     ws.current.onopen = () => ws.current?.send(JSON.stringify({ type: "login", username }));
     ws.current.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data);
-        if (parsed.type === "online-users") {
-          setOnlineUsers(parsed.users); // assume server sends array of online usernames
-        }
-        if (parsed.type === "message") {
-          setMessages((prev) => (prev.some((m) => m.id === parsed.id) ? prev : [...prev, parsed]));
-        }
-        if (parsed.type === "typing" && parsed.sender !== username) {
-          setTypingUser(parsed.sender);
-          setTimeout(() => setTypingUser(null), 2000);
-        }
-      } catch {}
-    };
-    return () => ws.current?.close();
-  }, [username]);
 
-  useEffect(() => {
-    ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com");
-    ws.current.onopen = () => ws.current?.send(JSON.stringify({ type: "login", username }));
-    ws.current.onmessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data) as Message & { type?: string };
+        if (parsed.type === "online-users") setOnlineUsers(parsed.users);
+
         if (parsed.type === "message") {
           setMessages((prev) => (prev.some((m) => m.id === parsed.id) ? prev : [...prev, parsed]));
         }
+
         if ((parsed as any).type === "typing" && (parsed as any).sender !== username) {
           const sender = (parsed as any).sender ?? null;
           setTypingUser(sender);
-          setTimeout(() => setTypingUser(null), 2000);
+          (setTimeout(() => setTypingUser(null), 2000) as unknown) as number;
         }
+
       } catch {}
     };
     return () => ws.current?.close();
   }, [username]);
 
   useEffect(() => {
+    if (messages.length === 0) return;
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages,]);
 
   if (!sessionNews[idx]) return <p>Invalid news item.</p>;
 
@@ -467,6 +454,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
     return `${hours}:${minutes} ${ampm}`;
   };
 
+  // ---------- Handle send ----------
   const handleSend = () => {
     if (!newMessage.trim() && !imageFile) return;
     const tempId = crypto.randomUUID();
@@ -493,17 +481,12 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
         setEditingMessageId(null);
       } else {
         setMessages((prev) => [...prev, messageToSend]);
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-          ws.current.send(JSON.stringify(messageToSend));
-        }
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(messageToSend));
       }
 
       setNewMessage("");
       setImageFile(null);
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
-      }
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
       setReplyTo(null);
       setShowMediaMenu(false);
     };
@@ -512,16 +495,13 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
       const reader = new FileReader();
       reader.onload = () => doSend(reader.result as string);
       reader.readAsDataURL(imageFile);
-    } else {
-      doSend(null);
-    }
+    } else doSend(null);
   };
 
   const onFileSelected = (file?: File | null) => {
     if (!file) return;
-    const objUrl = URL.createObjectURL(file);
     if (previewUrl) try { URL.revokeObjectURL(previewUrl); } catch {}
-    setPreviewUrl(objUrl);
+    setPreviewUrl(URL.createObjectURL(file));
     setImageFile(file);
     setShowMediaMenu(false);
   };
@@ -531,6 +511,25 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
 
   const shouldRenderMessage = (m: Message) => Boolean((m.text && m.text.trim()) || m.image);
 
+  // ---------- Typing indicator throttle ----------
+  const handleTyping = () => {
+    const now = Date.now();
+    if (ws.current?.readyState === WebSocket.OPEN && now - lastTypingRef.current > 1500) {
+      ws.current.send(JSON.stringify({ type: "typing", sender: username }));
+      lastTypingRef.current = now;
+    }
+  };
+  
+  useEffect(() => {
+    if (replyTo) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      screenEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      
+    }
+  }, [replyTo]);
+
+  
+
   return (
     <div className="news-detail">
       <button className="back-btn" onClick={() => navigate(-1)}>← Back</button>
@@ -538,157 +537,166 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
       <h2>{sessionNews[idx].title}</h2>
       <p>{sessionNews[idx].content}</p>
 
-      {isPrivateChatCard && (<>
-        {!chatVisible && (
-          <div className="chat-unhide-wrap-inline">
-            <button className="chat-unhide-btn" onClick={() => setChatVisible(true)} title="Unhide chat">🔓</button>
-          </div>
-        )}
-        {chatVisible && (
-          <div className="chat-container">
-            <button className="chat-hide-btn" onClick={() => setChatVisible(false)} title="Hide chat">🔒</button>
-            <div className="chat-box">
-              {typingUser && <div className="typing-indicator">{typingUser} is typing...</div>}
+      {isPrivateChatCard && (
+        <>
+          {!chatVisible && (
+            <div className="chat-unhide-wrap-inline">
+              <button className="chat-unhide-btn" onClick={() => setChatVisible(true)} title="Unhide chat">🔓</button>
+            </div>
+          )}
+          {chatVisible && (
+            <div className="chat-container">
+              <button className="chat-hide-btn" onClick={() => setChatVisible(false)} title="Hide chat">🔒</button>
+              <div className="chat-box">
+                
 
-              {messages.map((msg) => {
-                const isMe = msg.sender === username;
-                if (!shouldRenderMessage(msg)) return null;
+                {messages.map((msg) => {
+                  const isMe = msg.sender === username;
+                  if (!shouldRenderMessage(msg)) return null;
 
-                return (
-                  <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
-                    {!isMe && (<div className={`avatar message-avatar ${onlineUsers.includes(msg.sender) ? "online" : ""}`}>
-                      {msg.sender[0].toUpperCase()}
-                    </div>
-                    )}
-                    <div className="message-content-wrapper">
-                      <div className="message-content">
-                        {msg.replyTo && msg.replyTo.text && (
-                          <div className="reply-preview-inside">
-                            <div className="reply-bar" />
-                            <div className="reply-text">{msg.replyTo.text}</div>
-                          </div>
-                        )}
-
-                        <div className={`message ${isMe ? "me" : msg.sender}`}>
-                          {msg.text && <div>{msg.text}</div>}
-                          {msg.image && (
-                            <img
-                              src={msg.image ?? undefined}
-                              alt="sent"
-                              className="chat-image"
-                              onClick={() => setEnlargedImage(msg.image ?? null)}
-                            />
-                          )}
+                  return (
+                    <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
+                      {!isMe && (
+                        <div className={`avatar message-avatar ${onlineUsers.includes(msg.sender) ? "online" : ""}`}>
+                          {msg.sender[0].toUpperCase()}
                         </div>
-
-                        <div className="message-buttons-wrapper">
-                          {isMe && (
-                          <div className="left-buttons">
-                            <button
-                              className="edit-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingMessageId(msg.id ?? null);
-                                setNewMessage(msg.text ?? "");
-                                if (msg.image) setPreviewUrl(msg.image);
-                              }}
-                              title="Edit"
-                            >✏️</button>
-                            <button
-                              className="delete-btn"
-                              onClick={() => setMessages((prev) => prev.filter((m) => m.id !== msg.id))}
-                              title="Delete"
-                            >🚮</button>
-                          </div>
+                      )}
+                      <div className="message-content-wrapper">
+                        <div className="message-content">
+                          {msg.replyTo && msg.replyTo.text && (
+                            <div className="reply-preview-inside">
+                              <div className="reply-bar" />
+                              <div className="reply-text">{msg.replyTo.text}</div>
+                            </div>
                           )}
-                          <div className="right-buttons">
-                            <button
-                              className="reply-btn"
-                              onClick={() => setReplyTo({ id: msg.id, text: msg.text ?? (msg.image ? "Image" : "") })}
-                              title="Reply"
-                            >↩️</button>
+                          <div className={`message ${isMe ? "me" : msg.sender}`}>
+                            {msg.text && <div>{msg.text}</div>}
+                            {msg.image && (
+                              <img
+                                src={msg.image ?? undefined}
+                                alt="sent"
+                                className="chat-image"
+                                onClick={() => setEnlargedImage(msg.image ?? null)}
+                              />
+                            )}
                           </div>
-                        </div>
 
-                        <div className={`message-time ${isMe ? "time-right" : "time-left"}`}>{formatTime(msg.createdAt)}</div>
+                          <div className="message-buttons-wrapper">
+                            {isMe && (
+                              <div className="left-buttons">
+                                <button
+                                  className="edit-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingMessageId(msg.id ?? null);
+                                    setNewMessage(msg.text ?? "");
+                                    if (msg.image) setPreviewUrl(msg.image);
+                                  }}
+                                  title="Edit"
+                                >✏️</button>
+                                <button
+                                  className="delete-btn"
+                                  onClick={() => setMessages((prev) => prev.filter((m) => m.id !== msg.id))}
+                                  title="Delete"
+                                >🚮</button>
+                              </div>
+                            )}
+                            <div className="right-buttons">
+                              <button
+                                className="reply-btn"
+                                onClick={() => setReplyTo({ id: msg.id, text: msg.text ?? (msg.image ? "Image" : "") })}
+                                title="Reply"
+                              >↩️</button>
+                            </div>
+                          </div>
+
+                          <div className={`message-time ${isMe ? "time-right" : "time-left"}`}>{formatTime(msg.createdAt)}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-
-              <div ref={chatEndRef} />
-            </div>
-
-            {replyTo && replyTo.text && (
-              <div className="replying-bar">
-                <div className="replying-text">{replyTo.text}</div>
-                <button className="reply-cancel" onClick={() => setReplyTo(null)} title="Cancel reply">×</button>
+                  );
+                })}
+                {typingUser && <div className="typing-indicator">{typingUser}...</div>}
+                <div ref={chatEndRef} />
+                
               </div>
-            )}
+              
+              {replyTo && replyTo.text && (
+                <div className="replying-bar">
+                  <div className="replying-text">{replyTo.text}</div>
+                  <button className="reply-cancel" onClick={() => setReplyTo(null)} title="Cancel reply">×</button>
+                </div>
+              )}
 
-            <div className="input-area">
-              <div className="input-box" onClick={() => setShowMediaMenu(false)}>
-                {previewUrl && (
-                  <div className="image-preview">
-                    <img src={previewUrl} alt="preview" />
-                    <button
-                      className="remove-preview"
-                      onClick={() => { try { URL.revokeObjectURL(previewUrl); } catch {} setImageFile(null); setPreviewUrl(null); }}
-                      title="Remove"
-                    >×</button>
-                  </div>
-                )}
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  value={newMessage}
-                  onChange={(e) => { setNewMessage(e.target.value); ws.current?.send(JSON.stringify({ type: "typing", sender: username })); }}
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                />
-                <div className="input-icons">
-                  <div
-                    className="camera-btn"
-                    onClick={(e) => { e.stopPropagation(); setShowMediaMenu((s) => !s); }}
-                    title="Choose image"
-                  >📸</div>
-                  {showMediaMenu && (
-                    <div className="media-bubble" onClick={(e) => e.stopPropagation()}>
-                      <div className="media-item" onClick={openCamera}>📸 Camera</div>
-                      <div className="media-item" onClick={openGallery}>🖼️ Gallery</div>
+              <div className="input-area">
+                
+                <div className="input-box" onClick={() => setShowMediaMenu(false)}>
+                  {previewUrl && (
+                    <div className="image-preview">
+                      <img src={previewUrl} alt="preview" />
+                      <button
+                        className="remove-preview"
+                        onClick={() => { try { URL.revokeObjectURL(previewUrl); } catch {} setImageFile(null); setPreviewUrl(null); }}
+                        title="Remove"
+                      >×</button>
                     </div>
                   )}
-                  <button className="send-btn" onClick={handleSend} title="Send">🚀</button>
+                  <input
+                    type="text"
+                    placeholder="Type a message..."
+                    value={newMessage}
+                    onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                  />
+                  <div className="input-icons">
+                    <div
+                      className="camera-btn"
+                      onClick={(e) => { e.stopPropagation(); setShowMediaMenu((s) => !s); }}
+                      title="Choose image"
+                    >📸</div>
+                    {showMediaMenu && (
+                      <div className="media-bubble" onClick={(e) => e.stopPropagation()}>
+                        <div className="media-item" onClick={openCamera}>📸 Camera</div>
+                        <div className="media-item" onClick={openGallery}>🖼️ Gallery</div>
+                      </div>
+                    )}
+                    <button className="send-btn" onClick={handleSend} title="Send">🚀</button>
+                  </div>
                 </div>
-              </div>
 
-              <input
-                ref={fileInputCameraRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                style={{ display: "none" }}
-                onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
-              />
-              <input
-                ref={fileInputGalleryRef}
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
-              />
+                <input
+                  ref={fileInputCameraRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  style={{ display: "none" }}
+                  onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
+                />
+                <input
+                  ref={fileInputGalleryRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => { const file = e.target.files?.[0]; if (file) onFileSelected(file); e.currentTarget.value = ""; }}
+                />
+              </div>
             </div>
-          </div>
-        )}
-      </>
+            
+          )}
+          <div ref={screenEndRef} />
+        </>
       )}
-        {enlargedImage && (
-          <div className="modal" onClick={() => setEnlargedImage(null)}>
-            <img src={enlargedImage} alt="enlarged" className="modal-image" />
-          </div>
-        )}
-      </div>  );
+      {enlargedImage && (
+        <div className="modal" onClick={() => setEnlargedImage(null)}>
+          <img src={enlargedImage} alt="enlarged" className="modal-image" />
+        </div>
+      )}
+      
+    </div>
+  );
+  
 }
+
 function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [username, setUsername] = useState("");
