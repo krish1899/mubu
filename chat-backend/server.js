@@ -58,11 +58,15 @@ function broadcast(msg) {
 async function sendLastMessages(ws) {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -10, -1);
-    lastMessages.forEach(msgString => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(msgString);
+    lastMessages.forEach((msg) => {
+      try {
+        ws.send(typeof msg === "string" ? msg : JSON.stringify(msg));
+      } catch (err) {
+        console.error("❌ Failed to replay message:", msg);
+      }
     });
   } catch (err) {
-    console.error("❌ Failed to fetch/send messages:", err);
+    console.error("❌ Failed to fetch messages:", err);
   }
 }
 
