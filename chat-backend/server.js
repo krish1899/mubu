@@ -63,12 +63,16 @@ function broadcast(msg) {
 async function sendLastMessages(ws) {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -5, -1);
-    lastMessages.forEach(msg => {
-      try {
-        const parsedMsg = typeof msg === "string" ? JSON.parse(msg) : msg;
-        ws.send(JSON.stringify(parsedMsg));
+    // lastMessages are stored as JSON strings. Send them directly (no double-parse)
+    lastMessages.forEach(msgString => {
+      try { 
+        if (typeof msgString === "string") {
+          ws.send(msgString);
+        } else {
+          ws.send(JSON.stringify(msgString));
+        }
       } catch (err) {
-        console.error("❌ Failed to parse/send message:", msg, err);
+        console.error("❌ Failed to send stored message:", err);
       }
     });
   } catch (err) {
@@ -106,9 +110,11 @@ wss.on("connection", async (ws) => {
           type: "message",
           id: parsed.id || uuidv4(),
           sender: parsed.sender,
-          text: parsed.text || "",
-          image: parsed.image || null, // <-- image support
+          // Note: allow empty string or null; keep as-is to preserve images-only messages
+          text: parsed.text === undefined || parsed.text === null ? "" : parsed.text,
+          image: parsed.image ?? null, // keep base64 or null
           createdAt: parsed.createdAt || Date.now(),
+          replyTo: parsed.replyTo ?? null,
         };
 
         const msgString = JSON.stringify(msgObj);
