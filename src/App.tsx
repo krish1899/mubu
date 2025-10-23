@@ -481,6 +481,20 @@ useEffect(() => {
   };
 }, [username]);
 
+  useEffect(() => {
+      const scrollToBottom = () => {
+    if (screenEndRef.current && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+      screenEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  };
+    
+    const timer = setTimeout(scrollToBottom, 50);
+    return () => clearTimeout(timer);
+  }, [messages,loadingMessages]);
+
+  if (!sessionNews[idx]) return <p>Invalid news item.</p>;
+
   const formatTime = (ts: number) => {
     const date = new Date(ts);
     let hours = date.getHours();
@@ -569,6 +583,7 @@ const handleSend = () => {
       screenEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
       
     }
+    
   }, [replyTo]);
 
   
