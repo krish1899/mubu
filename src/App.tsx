@@ -414,9 +414,30 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   // ---------- WebSocket ----------
-  useEffect(() => {
+// ---------- WebSocket with auto-reconnect & message queue ----------
+const [loadingMessages, setLoadingMessages] = useState(true); // NEW: show loading
+const messageQueue = useRef<Message[]>([]); // NEW: queue for messages that can't be sent
+const reconnectTimer = useRef<number | null>(null);
+ // NEW: auto-reconnect timer
+
+useEffect(() => {
+  let wsAlive = true; // flag to avoid multiple connects
+
+  const connectWs = () => {
+    if (!wsAlive) return;
+
     ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com");
-    ws.current.onopen = () => ws.current?.send(JSON.stringify({ type: "login", username }));
+
+    ws.current.onopen = () => {
+      // login
+      ws.current?.send(JSON.stringify({ type: "login", username }));
+
+      // flush queued messages
+      messageQueue.current.forEach((m) => ws.current?.send(JSON.stringify(m)));
+      messageQueue.current = [];
+      setLoadingMessages(false); // first batch can now show
+    };
+
     ws.current.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data);
@@ -424,26 +445,41 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
         if (parsed.type === "online-users") setOnlineUsers(parsed.users);
 
         if (parsed.type === "message") {
-          setMessages((prev) => (prev.some((m) => m.id === parsed.id) ? prev : [...prev, parsed]));
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === parsed.id)) return prev;
+            return [...prev, parsed];
+          });
+          setLoadingMessages(false); // hide loading once first message arrives
         }
 
         if ((parsed as any).type === "typing" && (parsed as any).sender !== username) {
           const sender = (parsed as any).sender ?? null;
           setTypingUser(sender);
-          (setTimeout(() => setTypingUser(null), 2000) as unknown) as number;
+          clearTimeout(lastTypingRef.current as unknown as number); // NEW: cancel previous timeout
+          lastTypingRef.current = setTimeout(() => setTypingUser(null), 2000) as unknown as number;
         }
-
       } catch {}
     };
-    return () => ws.current?.close();
-  }, [username]);
 
-  useEffect(() => {
-    if (messages.length === 0) return;
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages,]);
+    ws.current.onclose = () => {
+      // attempt reconnect after 2s
+      reconnectTimer.current = setTimeout(connectWs, 2000);
+    };
 
-  if (!sessionNews[idx]) return <p>Invalid news item.</p>;
+    ws.current.onerror = () => {
+      ws.current?.close(); // trigger onclose to reconnect
+    };
+  };
+
+  connectWs();
+
+  // cleanup
+  return () => {
+    wsAlive = false;
+    ws.current?.close();
+    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+  };
+}, [username]);
 
   const formatTime = (ts: number) => {
     const date = new Date(ts);
@@ -454,49 +490,56 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
     return `${hours}:${minutes} ${ampm}`;
   };
 
-  // ---------- Handle send ----------
-  const handleSend = () => {
-    if (!newMessage.trim() && !imageFile) return;
-    const tempId = crypto.randomUUID();
+// ---------- Handle send with queue ----------
+const handleSend = () => {
+  if (!newMessage.trim() && !imageFile) return;
+  const tempId = crypto.randomUUID();
 
-    const doSend = (imgData?: string | null) => {
-      const messageToSend: Message & { type: string } = {
-        type: "message",
-        id: editingMessageId ?? tempId,
-        sender: username,
-        text: newMessage.trim() ? newMessage.trim() : null,
-        image: imgData ?? null,
-        createdAt: editingMessageId
-          ? messages.find((m) => m.id === editingMessageId)?.createdAt || Date.now()
-          : Date.now(),
-        replyTo: replyTo ?? null,
-      };
-
-      if (editingMessageId) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === editingMessageId ? { ...m, text: messageToSend.text, image: messageToSend.image } : m
-          )
-        );
-        setEditingMessageId(null);
-      } else {
-        setMessages((prev) => [...prev, messageToSend]);
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(messageToSend));
-      }
-
-      setNewMessage("");
-      setImageFile(null);
-      if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
-      setReplyTo(null);
-      setShowMediaMenu(false);
+  const doSend = (imgData?: string | null) => {
+    const messageToSend: Message & { type: string } = {
+      type: "message",
+      id: editingMessageId ?? tempId,
+      sender: username,
+      text: newMessage.trim() ? newMessage.trim() : null,
+      image: imgData ?? null,
+      createdAt: editingMessageId
+        ? messages.find((m) => m.id === editingMessageId)?.createdAt || Date.now()
+        : Date.now(),
+      replyTo: replyTo ?? null,
     };
 
-    if (imageFile) {
-      const reader = new FileReader();
-      reader.onload = () => doSend(reader.result as string);
-      reader.readAsDataURL(imageFile);
-    } else doSend(null);
+    if (editingMessageId) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === editingMessageId ? { ...m, text: messageToSend.text, image: messageToSend.image } : m
+        )
+      );
+      setEditingMessageId(null);
+    } else {
+      setMessages((prev) => [...prev, messageToSend]);
+
+      // NEW: send or queue if WS not open
+      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify(messageToSend));
+      } else {
+        messageQueue.current.push(messageToSend);
+      }
+    }
+
+    setNewMessage("");
+    setImageFile(null);
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
+    setReplyTo(null);
+    setShowMediaMenu(false);
   };
+
+  if (imageFile) {
+    const reader = new FileReader();
+    reader.onload = () => doSend(reader.result as string);
+    reader.readAsDataURL(imageFile);
+  } else doSend(null);
+};
+
 
   const onFileSelected = (file?: File | null) => {
     if (!file) return;
@@ -548,6 +591,7 @@ function NewsDetail({ sessionNews, imageSeeds, username }: any) {
             <div className="chat-container">
               <button className="chat-hide-btn" onClick={() => setChatVisible(false)} title="Hide chat">🔒</button>
               <div className="chat-box">
+                {loadingMessages && <div className="loading-messages">Loading messages...</div>}
                 
 
                 {messages.map((msg) => {
