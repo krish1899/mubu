@@ -19,6 +19,8 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_TOKEN,
 });
 
+seedCommentsIfEmpty();
+
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const TELEGRAM_CHAT_ID2 = process.env.TELEGRAM_CHAT_ID2;
@@ -45,7 +47,51 @@ async function sendTelegramRandomPic() {
 
 // ---------------- WebSocket ----------------
 const MESSAGE_LIST = "chat_messages";
+const COMMENTS_PREFIX = "comments:";
 let activeUsers = new Set();
+
+// Seed comments for each card if empty
+const SEED_COMMENTS = [
+  "Nice update!",
+  "Interesting take 👀",
+  "Didn’t expect this one.",
+  "Love this topic.",
+  "Great read!",
+  "Any sources on this?",
+  "Wow, didn’t know this.",
+  "So true.",
+  "This is wild.",
+  "I agree with this.",
+];
+
+async function seedCommentsIfEmpty() {
+  try {
+    // Seed for cards 0..9 (newsCount = 10)
+    const cardIds = Array.from({ length: 10 }, (_, i) => i);
+    await Promise.all(
+      cardIds.map(async (cardId) => {
+        const key = `${COMMENTS_PREFIX}${cardId}`;
+        const existing = await redis.lrange(key, -1, -1);
+        if (existing && existing.length > 0) return;
+
+        const picks = Array.from({ length: 3 }, () => {
+          const text = SEED_COMMENTS[Math.floor(Math.random() * SEED_COMMENTS.length)];
+          return JSON.stringify({
+            id: uuidv4(),
+            cardId,
+            username: "guest",
+            text,
+            createdAt: Date.now(),
+          });
+        });
+        await redis.rpush(key, ...picks);
+      })
+    );
+    console.log("✅ Seeded comments (if empty)");
+  } catch (err) {
+    console.error("❌ Failed to seed comments:", err);
+  }
+}
 
 const wss = new WebSocket.Server({ server });
 
@@ -93,6 +139,74 @@ wss.on("connection", async (ws) => {
         return;
       }
 
+      // Edit message
+      if (parsed.type === "edit") {
+        if (!parsed.id) return;
+        try {
+          const list = await redis.lrange(MESSAGE_LIST, 0, -1);
+          let changed = false;
+          const updated = list.map((raw) => {
+            const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
+            if (msg.id === parsed.id) {
+              changed = true;
+              return JSON.stringify({
+                ...msg,
+                text: typeof parsed.text === "undefined" ? msg.text : parsed.text,
+                image: typeof parsed.image === "undefined" ? msg.image : parsed.image,
+                editedAt: parsed.editedAt || Date.now(),
+              });
+            }
+            return typeof raw === "string" ? raw : JSON.stringify(raw);
+          });
+          if (changed) {
+            await redis.del(MESSAGE_LIST);
+            if (updated.length) {
+              await redis.rpush(MESSAGE_LIST, ...updated);
+              await redis.ltrim(MESSAGE_LIST, -500, -1);
+            }
+            broadcast(JSON.stringify({
+              type: "edit",
+              id: parsed.id,
+              text: parsed.text,
+              image: parsed.image,
+              editedAt: parsed.editedAt || Date.now(),
+            }));
+          }
+        } catch (err) {
+          console.error("❌ Failed to edit message:", err);
+        }
+        return;
+      }
+
+      // Delete message
+      if (parsed.type === "delete") {
+        if (!parsed.id) return;
+        try {
+          const list = await redis.lrange(MESSAGE_LIST, 0, -1);
+          let removed = false;
+          const updated = [];
+          for (const raw of list) {
+            const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
+            if (msg.id === parsed.id) {
+              removed = true;
+              continue;
+            }
+            updated.push(typeof raw === "string" ? raw : JSON.stringify(raw));
+          }
+          if (removed) {
+            await redis.del(MESSAGE_LIST);
+            if (updated.length) {
+              await redis.rpush(MESSAGE_LIST, ...updated);
+              await redis.ltrim(MESSAGE_LIST, -500, -1);
+            }
+            broadcast(JSON.stringify({ type: "delete", id: parsed.id }));
+          }
+        } catch (err) {
+          console.error("❌ Failed to delete message:", err);
+        }
+        return;
+      }
+
       // Chat message
       if (parsed.type === "message") {
         const msgObj = {
@@ -128,4 +242,41 @@ wss.on("connection", async (ws) => {
       console.log("👋 Disconnected:", ws.username);
     }
   });
+});
+
+// ---------------- Comments API ----------------
+app.get("/comments/:cardId", async (req, res) => {
+  try {
+    const { cardId } = req.params;
+    const key = `${COMMENTS_PREFIX}${cardId}`;
+    const list = await redis.lrange(key, -200, -1);
+    const parsed = list.map((item) => (typeof item === "string" ? JSON.parse(item) : item));
+    res.json(parsed);
+  } catch (err) {
+    console.error("❌ Failed to fetch comments:", err);
+    res.status(500).json({ error: "Failed to fetch comments" });
+  }
+});
+
+app.post("/comments", async (req, res) => {
+  try {
+    const { cardId, text, username } = req.body || {};
+    if (typeof cardId === "undefined" || !text) {
+      return res.status(400).json({ error: "cardId and text required" });
+    }
+    const comment = {
+      id: uuidv4(),
+      cardId,
+      username: username || "anon",
+      text,
+      createdAt: Date.now(),
+    };
+    const key = `${COMMENTS_PREFIX}${cardId}`;
+    await redis.rpush(key, JSON.stringify(comment));
+    await redis.ltrim(key, -200, -1);
+    res.json(comment);
+  } catch (err) {
+    console.error("❌ Failed to save comment:", err);
+    res.status(500).json({ error: "Failed to save comment" });
+  }
 });
