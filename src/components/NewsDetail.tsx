@@ -597,7 +597,9 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
             <div className="comment-list">
               {comments.map((c) => (
                 <div key={c.id} className="comment-item">
-                  <span className="comment-user">{c.username}:</span>
+                  {c.username !== "mumu" && c.username !== "bubu" && (
+                    <span className="comment-user">{c.username}:</span>
+                  )}
                   <span className="comment-text">{c.text}</span>
                 </div>
               ))}
@@ -646,10 +648,12 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                     {!commentLoading && (
                       <div className="comment-list">
                         {comments.map((c) => (
-                          <div key={c.id} className="comment-item">
+                        <div key={c.id} className="comment-item">
+                          {c.username !== "mumu" && c.username !== "bubu" && (
                             <span className="comment-user">{c.username}:</span>
-                            <span className="comment-text">{c.text}</span>
-                          </div>
+                          )}
+                          <span className="comment-text">{c.text}</span>
+                        </div>
                         ))}
                       </div>
                     )}
