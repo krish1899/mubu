@@ -109,9 +109,9 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                 const next = prev.map((m) =>
                   m.id === parsed.id ? { ...parsed, localStatus: "sent" } : m
                 );
-                return next.slice(-10);
+                return normalizeMessages(next);
               }
-              return [...prev, { ...parsed, localStatus: "sent" }].slice(-10);
+              return normalizeMessages([...prev, { ...parsed, localStatus: "sent" }]);
             });
             if (parsed.id) {
               clearFailTimer(parsed.id);
@@ -122,8 +122,8 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 
           if (parsed.type === "edit") {
             setMessages((prev) =>
-              prev
-                .map((m) =>
+              normalizeMessages(
+                prev.map((m) =>
                   m.id === parsed.id
                     ? {
                         ...m,
@@ -133,20 +133,20 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                       }
                     : m
                 )
-                .slice(-10)
+              )
             );
           }
 
           if (parsed.type === "like") {
             setMessages((prev) =>
-              prev
-                .map((m) => (m.id === parsed.id ? { ...m, likedBy: parsed.likedBy ?? [] } : m))
-                .slice(-10)
+              normalizeMessages(
+                prev.map((m) => (m.id === parsed.id ? { ...m, likedBy: parsed.likedBy ?? [] } : m))
+              )
             );
           }
 
           if (parsed.type === "delete") {
-            setMessages((prev) => prev.filter((m) => m.id !== parsed.id).slice(-10));
+            setMessages((prev) => normalizeMessages(prev.filter((m) => m.id !== parsed.id)));
           }
 
           if ((parsed as any).type === "typing" && (parsed as any).sender !== username) {
@@ -162,9 +162,11 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
         // attempt reconnect after 2s
         reconnectTimer.current = setTimeout(connectWs, 2000);
         setMessages((prev) =>
-          prev.map((m) =>
-            (m as any).localStatus === "pending" ? { ...m, localStatus: "failed" } : m
-          ).slice(-10)
+          normalizeMessages(
+            prev.map((m) =>
+              (m as any).localStatus === "pending" ? { ...m, localStatus: "failed" } : m
+            )
+          )
         );
       };
 
@@ -222,6 +224,15 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     };
   }, [chatVisible]);
 
+  const scrollChatToBottom = () => {
+    if (chatBoxRef.current) {
+      chatBoxRef.current.scrollTo({
+        top: chatBoxRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  };
+
   if (!sessionNews[idx]) return <p>Invalid news item.</p>;
 
   const formatTime = (ts: number) => {
@@ -232,6 +243,9 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     hours = hours % 12 || 12;
     return `${hours}:${minutes} ${ampm}`;
   };
+
+  const normalizeMessages = (list: Message[]) =>
+    [...list].sort((a, b) => a.createdAt - b.createdAt).slice(-10);
 
   const scheduleFail = (id: string) => {
     clearFailTimer(id);
@@ -260,7 +274,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     if (!msg.id) return;
     const payload = { ...msg, type: "message", localStatus: "pending" };
     setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, localStatus: "pending" } : m)).slice(-10)
+      normalizeMessages(prev.map((m) => (m.id === msg.id ? { ...m, localStatus: "pending" } : m)))
     );
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify(payload));
@@ -333,9 +347,11 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 
       if (editingMessageId) {
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === editingMessageId ? { ...m, text: messageToSend.text, image: messageToSend.image } : m
-          ).slice(-10)
+          normalizeMessages(
+            prev.map((m) =>
+              m.id === editingMessageId ? { ...m, text: messageToSend.text, image: messageToSend.image } : m
+            )
+          )
         );
         const editPayload = {
           type: "edit",
@@ -351,7 +367,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
         }
         setEditingMessageId(null);
       } else {
-        setMessages((prev) => [...prev, messageToSend].slice(-10));
+        setMessages((prev) => normalizeMessages([...prev, messageToSend]));
 
         // NEW: send or queue if WS not open
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -470,11 +486,12 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     }
     unlockClickCountRef.current += 1;
     if (unlockClickCountRef.current >= 3) {
-        setChatLocked(false);
-        setChatVisible(true);
-        setTimeout(() => {
-          chatContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 0);
+      setChatLocked(false);
+      setChatVisible(true);
+      setTimeout(() => {
+        chatContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollChatToBottom();
+      }, 0);
       unlockClickCountRef.current = 0;
     }
   };
@@ -769,7 +786,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         const deletePayload = { type: "delete", id: msg.id };
-                                        setMessages((prev) => prev.filter((m) => m.id !== msg.id).slice(-10));
+                                        setMessages((prev) => normalizeMessages(prev.filter((m) => m.id !== msg.id)));
                                         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
                                           ws.current.send(JSON.stringify(deletePayload));
                                         } else {
