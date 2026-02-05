@@ -54,7 +54,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const [commentError, setCommentError] = useState("");
   const [roseTheme, setRoseTheme] = useState(false);
   const [teddyTheme, setTeddyTheme] = useState(false);
-  const [unlockClickCount, setUnlockClickCount] = useState(0);
+  const unlockClickCountRef = useRef(0);
 
   const API_BASE = (import.meta as any).env?.VITE_API_BASE || "https://mubu-backend-rpx8.onrender.com";
 
@@ -355,18 +355,15 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     } else {
       setUnlockError("");
     }
-    setUnlockClickCount((prev) => {
-      const next = prev + 1;
-      if (next >= 3) {
+    unlockClickCountRef.current += 1;
+    if (unlockClickCountRef.current >= 3) {
         setChatLocked(false);
         setChatVisible(true);
         setTimeout(() => {
           chatContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 0);
-        return 0;
-      }
-      return next;
-    });
+      unlockClickCountRef.current = 0;
+    }
   };
 
   useEffect(() => {
