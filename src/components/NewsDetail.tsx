@@ -200,6 +200,14 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 
   useEffect(() => {
     if (!chatVisible) return;
+    const raf = requestAnimationFrame(() => {
+      if (chatBoxRef.current) {
+        chatBoxRef.current.scrollTo({
+          top: chatBoxRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    });
     const timer = setTimeout(() => {
       if (chatBoxRef.current) {
         chatBoxRef.current.scrollTo({
@@ -207,8 +215,11 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
           behavior: "smooth",
         });
       }
-    }, 50);
-    return () => clearTimeout(timer);
+    }, 150);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
   }, [chatVisible]);
 
   if (!sessionNews[idx]) return <p>Invalid news item.</p>;
