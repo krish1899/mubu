@@ -143,7 +143,7 @@ wss.on("connection", async (ws) => {
       if (parsed.type === "edit") {
         if (!parsed.id) return;
         try {
-          const list = await redis.lrange(MESSAGE_LIST, 0, -1);
+          const list = await redis.lrange(MESSAGE_LIST, -500, -1);
           let changed = false;
           const updated = list.map((raw) => {
             const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
