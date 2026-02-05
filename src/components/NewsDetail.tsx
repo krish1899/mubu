@@ -53,7 +53,8 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const [commentLoading, setCommentLoading] = useState(false);
   const [commentError, setCommentError] = useState("");
   const [roseTheme, setRoseTheme] = useState(false);
-  const [likedMessageIds, setLikedMessageIds] = useState<Set<string>>(new Set());
+  const [teddyTheme, setTeddyTheme] = useState(false);
+  const [unlockClickCount, setUnlockClickCount] = useState(0);
 
   const API_BASE = (import.meta as any).env?.VITE_API_BASE || "https://mubu-backend-rpx8.onrender.com";
 
@@ -120,6 +121,12 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                     }
                   : m
               )
+            );
+          }
+
+          if (parsed.type === "like") {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === parsed.id ? { ...m, likedBy: parsed.likedBy ?? [] } : m))
             );
           }
 
@@ -238,6 +245,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
           ? messages.find((m) => m.id === editingMessageId)?.createdAt || Date.now()
           : Date.now(),
         replyTo: replyTo ?? null,
+        likedBy: [],
         localStatus: "pending",
       };
 
@@ -322,25 +330,43 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     }
   };
 
-  const handleUnlock = async () => {
-    if (unlockInput.trim().toLowerCase() === "love") {
-      setChatLocked(false);
-      setChatVisible(true);
-      setUnlockError("");
-      setUnlockInput("");
-      setTimeout(() => {
-        chatContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 0);
+  const toggleLike = (msg: Message) => {
+    if (!msg.id) return;
+    const current = Array.isArray(msg.likedBy) ? msg.likedBy : [];
+    const hasLiked = current.includes(username);
+    const nextLikedBy = hasLiked ? current.filter((u) => u !== username) : [...current, username];
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, likedBy: nextLikedBy } : m))
+    );
+    const payload = { type: "like", id: msg.id, username };
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify(payload));
     } else {
-      const text = unlockInput.trim();
-      if (!text) {
-        setUnlockError("Enter a comment");
-        return;
-      }
+      messageQueue.current.push(payload);
+    }
+  };
+
+  const handleUnlock = async () => {
+    const text = unlockInput.trim();
+    if (text) {
       setUnlockError("");
       await submitComment(text);
       setUnlockInput("");
+    } else {
+      setUnlockError("");
     }
+    setUnlockClickCount((prev) => {
+      const next = prev + 1;
+      if (next >= 3) {
+        setChatLocked(false);
+        setChatVisible(true);
+        setTimeout(() => {
+          chatContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 0);
+        return 0;
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -458,7 +484,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
           {chatVisible && (
             <div
               ref={chatContainerRef}
-              className={`chat-container valentine-chat ${roseTheme ? "rose-chat" : ""}`}
+              className={`chat-container valentine-chat ${roseTheme ? "rose-chat" : ""} ${teddyTheme ? "teddy-chat" : ""}`}
             >
               <button
                 className="chat-toggle-btn"
@@ -477,8 +503,8 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                     <div className="chat-lock-title">Comment here</div>
                     <div className="chat-lock-input">
                       <input
-                        type="password"
-                        placeholder="Enter comment..."
+                        type="text"
+                        placeholder="Write a comment..."
                         value={unlockInput}
                         onChange={(e) => { setUnlockInput(e.target.value); setUnlockError(""); }}
                         onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
@@ -504,14 +530,30 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                 </div>
               ) : (
                 <>
-                  <button
-                    className="chat-theme-toggle"
-                    onClick={() => setRoseTheme((prev) => !prev)}
-                    title="Toggle Rose Theme"
-                    aria-label="Toggle Rose Theme"
-                  >
-                    🌹
-                  </button>
+                  <div className="chat-theme-wrap">
+                    <button
+                      className={`chat-theme-toggle ${roseTheme ? "active" : ""}`}
+                      onClick={() => {
+                        setRoseTheme((prev) => !prev);
+                        setTeddyTheme(false);
+                      }}
+                      title="Toggle Rose Theme"
+                      aria-label="Toggle Rose Theme"
+                    >
+                      🌹
+                    </button>
+                    <button
+                      className={`chat-theme-toggle teddy ${teddyTheme ? "active" : ""}`}
+                      onClick={() => {
+                        setTeddyTheme((prev) => !prev);
+                        setRoseTheme(false);
+                      }}
+                      title="Toggle Teddy Theme"
+                      aria-label="Toggle Teddy Theme"
+                    >
+                      🧸
+                    </button>
+                  </div>
                   {roseTheme && (
                     <div className="rose-petals" aria-hidden="true">
                       <span className="rose-petal p1" />
@@ -519,6 +561,15 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                       <span className="rose-petal p3" />
                       <span className="rose-petal p4" />
                       <span className="rose-petal p5" />
+                    </div>
+                  )}
+                  {teddyTheme && (
+                    <div className="teddy-floats" aria-hidden="true">
+                      <span className="teddy-float t1" />
+                      <span className="teddy-float t2" />
+                      <span className="teddy-float t3" />
+                      <span className="teddy-float t4" />
+                      <span className="teddy-float t5" />
                     </div>
                   )}
                   <div className="chat-box">
@@ -548,14 +599,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                               <div
                                 className={`message ${isMe ? "me" : msg.sender}`}
                                 onDoubleClick={() => {
-                                  const likedId = msg.id;
-                                  if (!likedId) return;
-                                  setLikedMessageIds((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(likedId)) next.delete(likedId);
-                                    else next.add(likedId);
-                                    return next;
-                                  });
+                                  toggleLike(msg);
                                 }}
                                 title="Double tap to like"
                               >
@@ -568,8 +612,8 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                                     onClick={() => setEnlargedImage(msg.image ?? null)}
                                   />
                                 )}
-                                {msg.id && likedMessageIds.has(msg.id) && (
-                                  <div className="message-like">❤️</div>
+                                {msg.likedBy && msg.likedBy.length > 0 && (
+                                  <div className="message-like">❤️ {msg.likedBy.length}</div>
                                 )}
                                 {messageShortsId && (
                                   <button

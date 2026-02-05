@@ -207,6 +207,56 @@ wss.on("connection", async (ws) => {
         return;
       }
 
+      // Like message
+      if (parsed.type === "like") {
+        if (!parsed.id || !parsed.username) return;
+        try {
+          const list = await redis.lrange(MESSAGE_LIST, 0, -1);
+          let changed = false;
+          const updated = list.map((raw) => {
+            const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
+            if (msg.id === parsed.id) {
+              const likedBy = Array.isArray(msg.likedBy) ? msg.likedBy : [];
+              const hasLiked = likedBy.includes(parsed.username);
+              const nextLikedBy = hasLiked
+                ? likedBy.filter((u) => u !== parsed.username)
+                : [...likedBy, parsed.username];
+              changed = true;
+              return JSON.stringify({ ...msg, likedBy: nextLikedBy });
+            }
+            return typeof raw === "string" ? raw : JSON.stringify(raw);
+          });
+          if (changed) {
+            await redis.del(MESSAGE_LIST);
+            if (updated.length) {
+              await redis.rpush(MESSAGE_LIST, ...updated);
+              await redis.ltrim(MESSAGE_LIST, -500, -1);
+            }
+            const updatedMsgRaw = updated.find((raw) => {
+              try {
+                const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
+                return msg.id === parsed.id;
+              } catch {
+                return false;
+              }
+            });
+            const updatedMsg = updatedMsgRaw
+              ? (typeof updatedMsgRaw === "string" ? JSON.parse(updatedMsgRaw) : updatedMsgRaw)
+              : null;
+            broadcast(
+              JSON.stringify({
+                type: "like",
+                id: parsed.id,
+                likedBy: updatedMsg?.likedBy || [],
+              })
+            );
+          }
+        } catch (err) {
+          console.error("❌ Failed to like message:", err);
+        }
+        return;
+      }
+
       // Chat message
       if (parsed.type === "message") {
         const msgObj = {
@@ -217,6 +267,7 @@ wss.on("connection", async (ws) => {
           image: parsed.image ?? null,
           createdAt: parsed.createdAt || Date.now(),
           replyTo: parsed.replyTo ?? null,
+          likedBy: Array.isArray(parsed.likedBy) ? parsed.likedBy : [],
         };
 
         const msgString = JSON.stringify(msgObj);

@@ -10,4 +10,5 @@ export interface Message {
   image?: string | null;
   createdAt: number;
   replyTo?: ReplyInfo | null;
+  likedBy?: string[];
 }
