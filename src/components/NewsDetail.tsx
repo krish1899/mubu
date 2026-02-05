@@ -31,6 +31,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const [newMessage, setNewMessage] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [compressedImageData, setCompressedImageData] = useState<string | null>(null);
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
@@ -39,6 +40,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const screenEndRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
+  const chatBoxRef = useRef<HTMLDivElement | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const fileInputCameraRef = useRef<HTMLInputElement | null>(null);
   const fileInputGalleryRef = useRef<HTMLInputElement | null>(null);
@@ -47,6 +49,8 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [showShorts, setShowShorts] = useState(false);
   const [shortsId, setShortsId] = useState<string | null>(null);
+  const [showReel, setShowReel] = useState(false);
+  const [reelId, setReelId] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [commentText, setCommentText] = useState("");
   const [commentOpen, setCommentOpen] = useState(false);
@@ -71,7 +75,13 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     const connectWs = () => {
       if (!wsAlive) return;
 
-      ws.current = new WebSocket("wss://mubu-backend-rpx8.onrender.com");
+      const apiBase = API_BASE;
+      const wsUrl = apiBase.startsWith("https://")
+        ? apiBase.replace("https://", "wss://")
+        : apiBase.startsWith("http://")
+          ? apiBase.replace("http://", "ws://")
+          : "wss://mubu-backend-rpx8.onrender.com";
+      ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
         // login
@@ -96,11 +106,12 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
             setMessages((prev) => {
               const exists = prev.find((m) => m.id === parsed.id);
               if (exists) {
-                return prev.map((m) =>
+                const next = prev.map((m) =>
                   m.id === parsed.id ? { ...parsed, localStatus: "sent" } : m
                 );
+                return next.slice(-10);
               }
-              return [...prev, { ...parsed, localStatus: "sent" }];
+              return [...prev, { ...parsed, localStatus: "sent" }].slice(-10);
             });
             if (parsed.id) {
               clearFailTimer(parsed.id);
@@ -111,27 +122,31 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 
           if (parsed.type === "edit") {
             setMessages((prev) =>
-              prev.map((m) =>
-                m.id === parsed.id
-                  ? {
-                      ...m,
-                      text: parsed.text ?? m.text,
-                      image: parsed.image ?? m.image,
-                      editedAt: parsed.editedAt ?? Date.now(),
-                    }
-                  : m
-              )
+              prev
+                .map((m) =>
+                  m.id === parsed.id
+                    ? {
+                        ...m,
+                        text: parsed.text ?? m.text,
+                        image: parsed.image ?? m.image,
+                        editedAt: parsed.editedAt ?? Date.now(),
+                      }
+                    : m
+                )
+                .slice(-10)
             );
           }
 
           if (parsed.type === "like") {
             setMessages((prev) =>
-              prev.map((m) => (m.id === parsed.id ? { ...m, likedBy: parsed.likedBy ?? [] } : m))
+              prev
+                .map((m) => (m.id === parsed.id ? { ...m, likedBy: parsed.likedBy ?? [] } : m))
+                .slice(-10)
             );
           }
 
           if (parsed.type === "delete") {
-            setMessages((prev) => prev.filter((m) => m.id !== parsed.id));
+            setMessages((prev) => prev.filter((m) => m.id !== parsed.id).slice(-10));
           }
 
           if ((parsed as any).type === "typing" && (parsed as any).sender !== username) {
@@ -149,7 +164,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
         setMessages((prev) =>
           prev.map((m) =>
             (m as any).localStatus === "pending" ? { ...m, localStatus: "failed" } : m
-          )
+          ).slice(-10)
         );
       };
 
@@ -170,15 +185,31 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 
   useEffect(() => {
     const scrollToBottom = () => {
-      if (screenEndRef.current && chatEndRef.current) {
-        chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-        screenEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+      if (chatBoxRef.current) {
+        chatBoxRef.current.scrollTo({
+          top: chatBoxRef.current.scrollHeight,
+          behavior: "smooth",
+        });
       }
+      screenEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     };
 
     const timer = setTimeout(scrollToBottom, 50);
     return () => clearTimeout(timer);
   }, [messages, loadingMessages]);
+
+  useEffect(() => {
+    if (!chatVisible) return;
+    const timer = setTimeout(() => {
+      if (chatBoxRef.current) {
+        chatBoxRef.current.scrollTo({
+          top: chatBoxRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [chatVisible]);
 
   if (!sessionNews[idx]) return <p>Invalid news item.</p>;
 
@@ -218,7 +249,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     if (!msg.id) return;
     const payload = { ...msg, type: "message", localStatus: "pending" };
     setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, localStatus: "pending" } : m))
+      prev.map((m) => (m.id === msg.id ? { ...m, localStatus: "pending" } : m)).slice(-10)
     );
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify(payload));
@@ -228,9 +259,49 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     }
   };
 
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("file_read_failed"));
+      reader.readAsDataURL(file);
+    });
+
+  const compressImageDataUrl = async (dataUrl: string, maxSize = 1024, targetBytes = 100 * 1024) => {
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("image_load_failed"));
+    });
+
+    const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas_ctx_failed");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    let quality = 0.75;
+    let output = canvas.toDataURL("image/jpeg", quality);
+    while (output.length > targetBytes * 1.37 && quality > 0.35) {
+      quality -= 0.1;
+      output = canvas.toDataURL("image/jpeg", quality);
+    }
+    return output;
+  };
+
+  const compressFileToDataUrl = async (file: File) => {
+    const dataUrl = await readFileAsDataUrl(file);
+    return compressImageDataUrl(dataUrl);
+  };
+
   // ---------- Handle send with queue ----------
-  const handleSend = () => {
-    if (!newMessage.trim() && !imageFile) return;
+  const handleSend = async () => {
+    if (!newMessage.trim() && !imageFile && !compressedImageData) return;
     const tempId = crypto.randomUUID();
 
     const doSend = (imgData?: string | null) => {
@@ -253,7 +324,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
         setMessages((prev) =>
           prev.map((m) =>
             m.id === editingMessageId ? { ...m, text: messageToSend.text, image: messageToSend.image } : m
-          )
+          ).slice(-10)
         );
         const editPayload = {
           type: "edit",
@@ -269,7 +340,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
         }
         setEditingMessageId(null);
       } else {
-        setMessages((prev) => [...prev, messageToSend]);
+        setMessages((prev) => [...prev, messageToSend].slice(-10));
 
         // NEW: send or queue if WS not open
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -282,24 +353,40 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 
       setNewMessage("");
       setImageFile(null);
-      if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl(null);
+      setCompressedImageData(null);
       setReplyTo(null);
       setShowMediaMenu(false);
     };
 
-    if (imageFile) {
-      const reader = new FileReader();
-      reader.onload = () => doSend(reader.result as string);
-      reader.readAsDataURL(imageFile);
+    if (imageFile || compressedImageData) {
+      const imgData = imageFile
+        ? (compressedImageData ?? (await compressFileToDataUrl(imageFile)))
+        : compressedImageData;
+      doSend(imgData);
     } else doSend(null);
   };
 
   const onFileSelected = (file?: File | null) => {
     if (!file) return;
-    if (previewUrl) try { URL.revokeObjectURL(previewUrl); } catch {}
-    setPreviewUrl(URL.createObjectURL(file));
+    if (previewUrl && previewUrl.startsWith("blob:")) {
+      try { URL.revokeObjectURL(previewUrl); } catch {}
+    }
     setImageFile(file);
     setShowMediaMenu(false);
+    compressFileToDataUrl(file)
+      .then((dataUrl) => {
+        setCompressedImageData(dataUrl);
+        setPreviewUrl(dataUrl);
+      })
+      .catch(() => {
+        const fallback = URL.createObjectURL(file);
+        setCompressedImageData(null);
+        setPreviewUrl(fallback);
+      });
   };
 
   const openCamera = () => { setShowMediaMenu(false); fileInputCameraRef.current?.click(); };
@@ -315,10 +402,25 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     return null;
   };
 
+  const extractReelId = (text?: string | null) => {
+    if (!text) return null;
+    const reelMatch = text.match(/instagram\.com\/reel\/([A-Za-z0-9_-]+)/i);
+    if (reelMatch?.[1]) return reelMatch[1];
+    const reelsMatch = text.match(/instagram\.com\/reels\/([A-Za-z0-9_-]+)/i);
+    if (reelsMatch?.[1]) return reelsMatch[1];
+    return null;
+  };
+
   const toShortsEmbed = (id: string) => `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&playsinline=1`;
   const openShorts = (id: string) => {
     setShortsId(id);
     setShowShorts(true);
+  };
+
+  const toReelEmbed = (id: string) => `https://www.instagram.com/reel/${id}/embed`;
+  const openReel = (id: string) => {
+    setReelId(id);
+    setShowReel(true);
   };
 
   // ---------- Typing indicator throttle ----------
@@ -569,7 +671,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                       <span className="teddy-float t5" />
                     </div>
                   )}
-                  <div className="chat-box">
+                  <div className="chat-box" ref={chatBoxRef}>
                     {loadingMessages && <div className="loading-messages">Loading messages...</div>}
 
                     {messages.map((msg) => {
@@ -577,6 +679,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                       const senderInitial = msg.sender?.[0]?.toUpperCase() ?? "?";
                       if (!shouldRenderMessage(msg)) return null;
                       const messageShortsId = extractShortsId(msg.text);
+                      const messageReelId = extractReelId(msg.text);
 
                       return (
                         <div key={msg.id} className={`message-group ${isMe ? "me" : msg.sender}`}>
@@ -622,6 +725,16 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                                     <span>Play Shorts</span>
                                   </button>
                                 )}
+                                {messageReelId && (
+                                  <button
+                                    className="shorts-thumb"
+                                    onClick={() => openReel(messageReelId)}
+                                    title="Play Reel"
+                                  >
+                                    <span className="shorts-play">▶</span>
+                                    <span>Play Reel</span>
+                                  </button>
+                                )}
                               </div>
 
                               <div className="message-buttons-wrapper">
@@ -633,7 +746,10 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                                         e.stopPropagation();
                                         setEditingMessageId(msg.id ?? null);
                                         setNewMessage(msg.text ?? "");
-                                        if (msg.image) setPreviewUrl(msg.image);
+                                        if (msg.image) {
+                                          setPreviewUrl(msg.image);
+                                          setCompressedImageData(msg.image);
+                                        }
                                       }}
                                       title="Edit"
                                     >✏️</button>
@@ -642,7 +758,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         const deletePayload = { type: "delete", id: msg.id };
-                                        setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+                                        setMessages((prev) => prev.filter((m) => m.id !== msg.id).slice(-10));
                                         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
                                           ws.current.send(JSON.stringify(deletePayload));
                                         } else {
@@ -701,7 +817,16 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                           <img src={previewUrl} alt="preview" />
                           <button
                             className="remove-preview"
-                            onClick={() => { try { URL.revokeObjectURL(previewUrl); } catch {} setImageFile(null); setPreviewUrl(null); }}
+                            onClick={() => {
+                              try {
+                                if (previewUrl && previewUrl.startsWith("blob:")) {
+                                  URL.revokeObjectURL(previewUrl);
+                                }
+                              } catch {}
+                              setImageFile(null);
+                              setPreviewUrl(null);
+                              setCompressedImageData(null);
+                            }}
                             title="Remove"
                           >×</button>
                         </div>
@@ -765,6 +890,19 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
               src={toShortsEmbed(shortsId)}
               title="YouTube Shorts"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
+      {showReel && reelId && (
+        <div className="modal" onClick={() => setShowReel(false)}>
+          <div className="shorts-modal" onClick={(e) => e.stopPropagation()}>
+            <iframe
+              className="shorts-embed"
+              src={toReelEmbed(reelId)}
+              title="Instagram Reel"
+              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
               allowFullScreen
             />
           </div>

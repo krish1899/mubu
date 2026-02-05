@@ -104,13 +104,20 @@ function broadcast(msg) {
 async function sendLastMessages(ws) {
   try {
     const lastMessages = await redis.lrange(MESSAGE_LIST, -10, -1);
-    lastMessages.forEach((msg) => {
-      try {
-        ws.send(typeof msg === "string" ? msg : JSON.stringify(msg));
-      } catch (err) {
-        console.error("❌ Failed to replay message:", msg);
-      }
-    });
+    await Promise.all(
+      lastMessages.map(async (msg) => {
+        try {
+          const parsed = typeof msg === "string" ? JSON.parse(msg) : msg;
+          if (parsed?.id) {
+            const likedBy = await redis.smembers(`likes:${parsed.id}`);
+            parsed.likedBy = Array.isArray(likedBy) ? likedBy : [];
+          }
+          ws.send(JSON.stringify(parsed));
+        } catch (err) {
+          console.error("❌ Failed to replay message:", msg);
+        }
+      })
+    );
   } catch (err) {
     console.error("❌ Failed to fetch messages:", err);
   }
@@ -182,7 +189,7 @@ wss.on("connection", async (ws) => {
       if (parsed.type === "delete") {
         if (!parsed.id) return;
         try {
-          const list = await redis.lrange(MESSAGE_LIST, 0, -1);
+          const list = await redis.lrange(MESSAGE_LIST, -500, -1);
           let removed = false;
           const updated = [];
           for (const raw of list) {
@@ -199,6 +206,7 @@ wss.on("connection", async (ws) => {
               await redis.rpush(MESSAGE_LIST, ...updated);
               await redis.ltrim(MESSAGE_LIST, -500, -1);
             }
+            await redis.del(`likes:${parsed.id}`);
             broadcast(JSON.stringify({ type: "delete", id: parsed.id }));
           }
         } catch (err) {
@@ -206,51 +214,27 @@ wss.on("connection", async (ws) => {
         }
         return;
       }
-
       // Like message
       if (parsed.type === "like") {
         if (!parsed.id || !parsed.username) return;
         try {
-          const list = await redis.lrange(MESSAGE_LIST, 0, -1);
-          let changed = false;
-          const updated = list.map((raw) => {
-            const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
-            if (msg.id === parsed.id) {
-              const likedBy = Array.isArray(msg.likedBy) ? msg.likedBy : [];
-              const hasLiked = likedBy.includes(parsed.username);
-              const nextLikedBy = hasLiked
-                ? likedBy.filter((u) => u !== parsed.username)
-                : [...likedBy, parsed.username];
-              changed = true;
-              return JSON.stringify({ ...msg, likedBy: nextLikedBy });
-            }
-            return typeof raw === "string" ? raw : JSON.stringify(raw);
-          });
-          if (changed) {
-            await redis.del(MESSAGE_LIST);
-            if (updated.length) {
-              await redis.rpush(MESSAGE_LIST, ...updated);
-              await redis.ltrim(MESSAGE_LIST, -500, -1);
-            }
-            const updatedMsgRaw = updated.find((raw) => {
-              try {
-                const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
-                return msg.id === parsed.id;
-              } catch {
-                return false;
-              }
-            });
-            const updatedMsg = updatedMsgRaw
-              ? (typeof updatedMsgRaw === "string" ? JSON.parse(updatedMsgRaw) : updatedMsgRaw)
-              : null;
-            broadcast(
-              JSON.stringify({
-                type: "like",
-                id: parsed.id,
-                likedBy: updatedMsg?.likedBy || [],
-              })
-            );
+          const likeKey = `likes:${parsed.id}`;
+          const current = await redis.smembers(likeKey);
+          const likedBy = Array.isArray(current) ? current : [];
+          const hasLiked = likedBy.includes(parsed.username);
+          if (hasLiked) {
+            await redis.srem(likeKey, parsed.username);
+          } else {
+            await redis.sadd(likeKey, parsed.username);
           }
+          const nextLikedBy = await redis.smembers(likeKey);
+          broadcast(
+            JSON.stringify({
+              type: "like",
+              id: parsed.id,
+              likedBy: Array.isArray(nextLikedBy) ? nextLikedBy : [],
+            })
+          );
         } catch (err) {
           console.error("❌ Failed to like message:", err);
         }
@@ -331,3 +315,7 @@ app.post("/comments", async (req, res) => {
     res.status(500).json({ error: "Failed to save comment" });
   }
 });
+
+
+
+
