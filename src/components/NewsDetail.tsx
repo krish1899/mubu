@@ -227,9 +227,10 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     const tempId = crypto.randomUUID();
 
     const doSend = (imgData?: string | null) => {
+      const messageId = editingMessageId ?? tempId;
       const messageToSend: Message & { type: string; localStatus?: string } = {
         type: "message",
-        id: editingMessageId ?? tempId,
+        id: messageId,
         sender: username,
         text: newMessage.trim() ? newMessage.trim() : null,
         image: imgData ?? null,
@@ -265,7 +266,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
         // NEW: send or queue if WS not open
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify(messageToSend));
-          scheduleFail(messageToSend.id);
+          if (messageToSend.id) scheduleFail(messageToSend.id);
         } else {
           messageQueue.current.push(messageToSend);
         }
@@ -547,11 +548,12 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                               <div
                                 className={`message ${isMe ? "me" : msg.sender}`}
                                 onDoubleClick={() => {
-                                  if (!msg.id) return;
+                                  const likedId = msg.id;
+                                  if (!likedId) return;
                                   setLikedMessageIds((prev) => {
                                     const next = new Set(prev);
-                                    if (next.has(msg.id)) next.delete(msg.id);
-                                    else next.add(msg.id);
+                                    if (next.has(likedId)) next.delete(likedId);
+                                    else next.add(likedId);
                                     return next;
                                   });
                                 }}
