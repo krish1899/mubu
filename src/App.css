@@ -495,7 +495,12 @@ html, body, #root {
   box-shadow: 0 10px 30px rgba(121, 85, 52, 0.22);
 }
 .chocolate-chat .chat-box {
-  background: #fff6eb;
+  background:
+    linear-gradient(rgba(255, 246, 235, 0.86), rgba(255, 246, 235, 0.86)),
+    url("/chocolate-day-theme.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   border-color: #dfc5ab;
 }
 .chocolate-chat .message.me {
@@ -554,7 +559,15 @@ html, body, #root {
 .dark-mode .chat-theme-toggle.chocolate { background: #7d4c23; }
 .dark-mode .chat-theme-toggle.chocolate:hover { background: #5d3819; }
 .dark-mode .chocolate-chat { background: #17110c; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-.dark-mode .chocolate-chat .chat-box { background: #22170f; border-color: #3f2c1f; }
+.dark-mode .chocolate-chat .chat-box {
+  background:
+    linear-gradient(rgba(34, 23, 15, 0.8), rgba(34, 23, 15, 0.8)),
+    url("/chocolate-day-theme.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-color: #3f2c1f;
+}
 .dark-mode .chocolate-chat .message.me { background: #8b5a2b; color: #fff; }
 .dark-mode .chocolate-chat .message.mumu,
 .dark-mode .chocolate-chat .message.bubu { background: #3a291d; color: #f2ddc7; }

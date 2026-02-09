@@ -72,7 +72,6 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const messageQueue = useRef<any[]>([]); // queue for messages that can't be sent
   const reconnectTimer = useRef<number | null>(null);
   const pendingTimeouts = useRef<Record<string, number>>({});
-  const lastMessageIdRef = useRef<string | null>(null);
   // NEW: auto-reconnect timer
 
   const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
@@ -239,15 +238,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   }, [username]);
 
   useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    const lastMessageId = lastMessage?.id ?? null;
-    const isNewMessage = Boolean(
-      lastMessageId &&
-      lastMessageId !== lastMessageIdRef.current
-    );
-    lastMessageIdRef.current = lastMessageId;
-
-    if (!isNewMessage || !chatVisible || chatLocked) return;
+    if (!chatVisible || chatLocked) return;
     const timer = setTimeout(() => {
       scrollToLatest("smooth");
     }, 50);
