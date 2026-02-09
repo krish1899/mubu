@@ -71,7 +71,6 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const messageQueue = useRef<any[]>([]); // queue for messages that can't be sent
   const reconnectTimer = useRef<number | null>(null);
   const pendingTimeouts = useRef<Record<string, number>>({});
-  const wasNearBottomRef = useRef(true);
   const lastMessageIdRef = useRef<string | null>(null);
   // NEW: auto-reconnect timer
 
@@ -199,27 +198,6 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     };
   }, [username]);
 
-  const isNearBottom = () => {
-    const box = chatBoxRef.current;
-    if (!box) return true;
-    const distanceFromBottom = box.scrollHeight - box.scrollTop - box.clientHeight;
-    return distanceFromBottom <= 80;
-  };
-
-  useEffect(() => {
-    if (!chatVisible || chatLocked) return;
-    const box = chatBoxRef.current;
-    if (!box) return;
-
-    const updateNearBottom = () => {
-      wasNearBottomRef.current = isNearBottom();
-    };
-
-    updateNearBottom();
-    box.addEventListener("scroll", updateNearBottom);
-    return () => box.removeEventListener("scroll", updateNearBottom);
-  }, [chatVisible, chatLocked]);
-
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     const lastMessageId = lastMessage?.id ?? null;
@@ -230,18 +208,16 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     lastMessageIdRef.current = lastMessageId;
 
     if (!isNewMessage || !chatVisible || chatLocked) return;
-    if (lastMessage?.sender === username || wasNearBottomRef.current) {
-      const timer = setTimeout(() => {
-        if (chatBoxRef.current) {
-          chatBoxRef.current.scrollTo({
-            top: chatBoxRef.current.scrollHeight,
-            behavior: "smooth",
-          });
-        }
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [messages, chatVisible, chatLocked, username]);
+    const timer = setTimeout(() => {
+      if (chatBoxRef.current) {
+        chatBoxRef.current.scrollTo({
+          top: chatBoxRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [messages, chatVisible, chatLocked]);
 
   useEffect(() => {
     if (!chatVisible) return;
