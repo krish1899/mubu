@@ -7,6 +7,8 @@ type NewsFeedProps = {
   darkMode: boolean;
   setDarkMode: (v: boolean | ((prev: boolean) => boolean)) => void;
   setAuthenticated: (v: boolean) => void;
+  theme: "default" | "cartoon" | "emoji" | "fun";
+  setTheme: (v: "default" | "cartoon" | "emoji" | "fun") => void;
   getNewsImage: (seed: number) => string;
 };
 
@@ -16,10 +18,13 @@ function NewsFeed({
   darkMode,
   setDarkMode,
   setAuthenticated,
+  theme,
+  setTheme,
   getNewsImage,
 }: NewsFeedProps) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -42,10 +47,50 @@ function NewsFeed({
               {darkMode ? "Light Mode" : "Dark Mode"}
             </div>
             <div>Profile</div>
-            <div>Settings</div>
+            <div onClick={() => { setShowSettings(true); setShowMenu(false); }}>Settings</div>
           </div>
         )}
       </div>
+
+      {showSettings && (
+        <div className="modal" onClick={() => setShowSettings(false)}>
+          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-header">
+              <h3>Settings</h3>
+              <button className="settings-close" onClick={() => setShowSettings(false)} title="Close">×</button>
+            </div>
+            <div className="settings-section">
+              <div className="settings-title">Themes</div>
+              <div className="settings-theme-grid">
+                <button
+                  className={`settings-theme-btn ${theme === "default" ? "active" : ""}`}
+                  onClick={() => setTheme("default")}
+                >
+                  Classic
+                </button>
+                <button
+                  className={`settings-theme-btn ${theme === "cartoon" ? "active" : ""}`}
+                  onClick={() => setTheme("cartoon")}
+                >
+                  Cartoon
+                </button>
+                <button
+                  className={`settings-theme-btn ${theme === "emoji" ? "active" : ""}`}
+                  onClick={() => setTheme("emoji")}
+                >
+                  Emoji
+                </button>
+                <button
+                  className={`settings-theme-btn ${theme === "fun" ? "active" : ""}`}
+                  onClick={() => setTheme("fun")}
+                >
+                  Fun
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="news-feed">
         {sessionNews.map((card: any, idx: number) => (

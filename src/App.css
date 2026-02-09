@@ -117,6 +117,57 @@ html, body, #root {
   background: #f1f1f1;
 }
 
+.settings-modal {
+  width: min(420px, 92vw);
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+  color: #101112;
+}
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.settings-close {
+  border: none;
+  background: #f1f1f1;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.settings-section { margin-top: 12px; }
+.settings-title { font-weight: 700; margin-bottom: 8px; }
+.settings-section,
+.settings-title,
+.settings-theme-btn {
+  color: #101112;
+}
+.settings-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.settings-theme-btn {
+  border: 1px solid #e4e4e4;
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.settings-theme-btn.active {
+  border-color: #007bff;
+  background: #e9f2ff;
+  color: #0b3d91;
+}
+
 /* News Feed */
 .news-feed {
   display: grid;
@@ -414,6 +465,13 @@ html, body, #root {
 }
 .chat-theme-toggle:hover { transform: translateY(-1px); background: #e63b7e; }
 .chat-theme-toggle.active { box-shadow: 0 0 0 2px rgba(255, 77, 143, 0.4); }
+.chat-theme-toggle.week {
+  background: #d7265f;
+  font-weight: 700;
+  font-size: 13px;
+}
+.chat-theme-toggle.week:hover { background: #b91d50; }
+.chat-theme-toggle.week.active { box-shadow: 0 0 0 2px rgba(215, 38, 95, 0.4); }
 .chat-theme-toggle.teddy { background: #c47a3a; }
 .chat-theme-toggle.teddy:hover { background: #ab652f; }
 .chat-theme-toggle.teddy.active { box-shadow: 0 0 0 2px rgba(196, 122, 58, 0.45); }
@@ -488,6 +546,8 @@ html, body, #root {
 
 .dark-mode .chat-theme-toggle { background: #ff4d8f; }
 .dark-mode .chat-theme-toggle:hover { background: #e63b7e; }
+.dark-mode .chat-theme-toggle.week { background: #d7265f; }
+.dark-mode .chat-theme-toggle.week:hover { background: #b91d50; }
 .dark-mode .rose-chat { background: #1a0f14; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
 .dark-mode .rose-chat .chat-box { background: #1f1218; border-color: #3b1b2a; }
 .dark-mode .rose-chat .message.me { background: #ff4d8f; color: #fff; }
@@ -505,6 +565,64 @@ html, body, #root {
 .dark-mode .rose-chat .chat-theme-toggle { background: #ff4d8f; }
 .dark-mode .rose-chat .chat-theme-toggle:hover { background: #e63b7e; }
 .dark-mode .rose-chat .chat-lock-input button { background: #ff4d8f; }
+
+/* Valentines week image theme (inside small chat box only) */
+.valentine-week-chat {
+  background: unset;
+  box-shadow: unset;
+}
+.valentine-week-chat .chat-box {
+  background-image: url("/valentine-rose-day.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-color: #d9a3b8;
+}
+.valentine-week-chat .camera-btn,
+.valentine-week-chat .send-btn,
+.valentine-week-chat .chat-toggle-btn,
+.valentine-week-chat .chat-lock-input button,
+.valentine-week-chat .edit-btn,
+.valentine-week-chat .delete-btn,
+.valentine-week-chat .reply-btn,
+.valentine-week-chat .chat-theme-toggle {
+  background: linear-gradient(135deg, #ff78b4, #ff4f95);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+.valentine-week-chat .chat-theme-toggle.teddy {
+  background: linear-gradient(135deg, #ff9ac9, #ff63a2);
+}
+.valentine-week-chat .chat-theme-toggle.week {
+  background: linear-gradient(135deg, #ff6bac, #ff3f8b);
+}
+.valentine-week-chat .camera-btn:hover,
+.valentine-week-chat .send-btn:hover,
+.valentine-week-chat .chat-lock-input button:hover,
+.valentine-week-chat .edit-btn:hover,
+.valentine-week-chat .delete-btn:hover,
+.valentine-week-chat .reply-btn:hover,
+.valentine-week-chat .chat-theme-toggle:hover {
+  background: linear-gradient(135deg, #ff8fc1, #ff5da0);
+}
+.dark-mode .valentine-week-chat .chat-box {
+  background-image: url("/valentine-rose-day.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-color: #5a2d3e;
+}
+.dark-mode .valentine-week-chat .camera-btn,
+.dark-mode .valentine-week-chat .send-btn,
+.dark-mode .valentine-week-chat .chat-toggle-btn,
+.dark-mode .valentine-week-chat .chat-lock-input button,
+.dark-mode .valentine-week-chat .edit-btn,
+.dark-mode .valentine-week-chat .delete-btn,
+.dark-mode .valentine-week-chat .reply-btn,
+.dark-mode .valentine-week-chat .chat-theme-toggle {
+  background: linear-gradient(135deg, #ff7ab6, #ff4f95);
+  color: #fff;
+}
 
 .rose-petals {
   position: absolute;
@@ -747,6 +865,20 @@ html, body, #root {
 .message-status.failed:hover {
   text-decoration: underline;
 }
+.message-seen {
+  margin-left: 6px;
+  font-size: 0.65rem;
+  color: rgba(0,0,0,0.45);
+  font-weight: 600;
+}
+.message-ticks {
+  margin-left: 6px;
+  font-size: 0.7rem;
+  color: rgba(0,0,0,0.45);
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+.message-ticks.seen { color: #20b25c; }
 
 .message-like {
   position: absolute;
@@ -889,6 +1021,274 @@ html, body, #root {
 .dark-mode .news-top-bar { background: #1a1a1a; color: #e0e0e0; }
 .dark-mode .menu-dropdown { background: #111; color: #e0e0e0; }
 .dark-mode .menu-dropdown div:hover { background: #333; }
+.dark-mode .settings-modal { background: #111; color: #e0e0e0; }
+.dark-mode .settings-theme-btn { background: #1c1c1c; border-color: #333; color: #e0e0e0; }
+.dark-mode .settings-theme-btn.active { border-color: #4a90e2; background: #1b2633; color: #cfe3ff; }
+.dark-mode .settings-close { background: #1c1c1c; color: #e0e0e0; }
+
+/* App Themes */
+.theme-cartoon {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 183, 77, 0.35), transparent 45%),
+    radial-gradient(circle at 86% 16%, rgba(255, 99, 132, 0.28), transparent 40%),
+    radial-gradient(circle at 20% 80%, rgba(0, 188, 212, 0.22), transparent 45%),
+    repeating-linear-gradient(135deg, #fff6d1 0 18px, #ffe3a0 18px 36px);
+}
+.theme-cartoon .app,
+.theme-cartoon .news-detail,
+.theme-cartoon .news-feed {
+  font-family: "Comic Sans MS", "Trebuchet MS", "Verdana", cursive;
+}
+.theme-cartoon .news-top-bar { background: #ff7a00; letter-spacing: 0.5px; }
+.theme-cartoon .news-card {
+  border: 4px solid #ffb347;
+  box-shadow: 0 10px 0 rgba(0,0,0,0.18), inset 0 0 0 2px #fff6d1;
+  transform: rotate(-0.6deg);
+}
+.theme-cartoon .news-card:nth-child(2n) { transform: rotate(0.4deg); }
+.theme-cartoon .news-card:nth-child(3n) { transform: rotate(0.8deg); }
+.theme-cartoon .news-card { position: relative; overflow: visible; }
+.theme-cartoon .news-card::before {
+  content: "WOW!";
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  background: #ff3b3b;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 4px 6px;
+  border-radius: 10px;
+  border: 2px solid #fff;
+  transform: rotate(6deg);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+  animation: sticker-pop 4.5s ease-in-out infinite;
+}
+.theme-cartoon .news-card h3 { text-transform: uppercase; letter-spacing: 0.6px; }
+.theme-cartoon .news-card p { font-weight: 600; }
+.theme-cartoon .comment-btn { background: #ff7a00; border: 2px solid #ffb347; }
+.theme-cartoon .shorts-play { background: #ff7a00; }
+.theme-cartoon .chat-box { border: 3px dashed #ffb347; }
+.theme-cartoon .message.me { background: #ff7a00; color: #fff; }
+.theme-cartoon .message.mumu { background: #ffe08a; }
+.theme-cartoon .message.bubu { background: #9ee7ff; }
+.theme-cartoon .message::after {
+  content: "★";
+  position: absolute;
+  right: -10px;
+  top: -10px;
+  font-size: 12px;
+  color: #ff7a00;
+  background: #fff;
+  border-radius: 50%;
+  padding: 2px 5px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  animation: sticker-pop 6s ease-in-out infinite;
+}
+
+.theme-cartoon .app::before,
+.theme-cartoon .app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.theme-cartoon .app::before {
+  background:
+    radial-gradient(circle at 12% 20%, rgba(255, 122, 0, 0.18) 0 18px, transparent 20px),
+    radial-gradient(circle at 78% 15%, rgba(0, 188, 212, 0.2) 0 16px, transparent 18px),
+    radial-gradient(circle at 30% 70%, rgba(255, 99, 132, 0.18) 0 20px, transparent 22px);
+  animation: doodle-float 10s ease-in-out infinite;
+}
+.theme-cartoon .app::after {
+  background:
+    linear-gradient(45deg, rgba(0,0,0,0.06) 0 3px, transparent 3px 10px);
+  opacity: 0.35;
+}
+
+.theme-emoji {
+  background:
+    radial-gradient(circle at 15% 12%, rgba(255, 229, 100, 0.35), transparent 45%),
+    radial-gradient(circle at 80% 18%, rgba(255, 105, 180, 0.2), transparent 40%),
+    linear-gradient(135deg, #fff0f6 0%, #f1f7ff 50%, #fff7e6 100%);
+}
+.theme-emoji .news-top-bar { background: #ff4d4f; }
+.theme-emoji .news-card {
+  border-radius: 22px;
+  box-shadow: 0 12px 26px rgba(255, 77, 79, 0.25);
+}
+.theme-emoji .news-card { position: relative; overflow: visible; }
+.theme-emoji .news-card::before {
+  content: "🔥";
+  position: absolute;
+  top: -10px;
+  left: -6px;
+  font-size: 20px;
+  background: #fff;
+  border-radius: 50%;
+  padding: 4px;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+  animation: sticker-float 5s ease-in-out infinite;
+}
+.theme-emoji .news-card h3::after {
+  content: " ✨";
+}
+.theme-emoji .news-card h3::before {
+  content: "💥 ";
+}
+.theme-emoji .comment-btn { background: #ff4d4f; }
+.theme-emoji .shorts-play { background: #ff4d4f; }
+.theme-emoji .message.me { background: #ff4d4f; color: #fff; }
+.theme-emoji .message.mumu { background: #ffe066; }
+.theme-emoji .message.bubu { background: #9bf6ff; }
+.theme-emoji .message::after {
+  content: "✨";
+  position: absolute;
+  right: -8px;
+  top: -8px;
+  font-size: 12px;
+  background: #fff;
+  border-radius: 999px;
+  padding: 1px 4px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+  animation: sticker-float 5.5s ease-in-out infinite;
+}
+.theme-emoji .news-image { filter: saturate(1.25) contrast(1.05); }
+
+.theme-emoji .app::before,
+.theme-emoji .app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.theme-emoji .app::before {
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 229, 100, 0.28) 0 18px, transparent 20px),
+    radial-gradient(circle at 82% 18%, rgba(255, 105, 180, 0.25) 0 16px, transparent 18px),
+    radial-gradient(circle at 40% 80%, rgba(138, 43, 226, 0.2) 0 18px, transparent 20px);
+  animation: sparkle-drift 12s ease-in-out infinite;
+}
+.theme-emoji .app::after {
+  background:
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.35) 0 2px, transparent 3px),
+    radial-gradient(circle at 70% 25%, rgba(255,255,255,0.35) 0 2px, transparent 3px),
+    radial-gradient(circle at 45% 60%, rgba(255,255,255,0.35) 0 2px, transparent 3px);
+  animation: sparkle-twinkle 6s ease-in-out infinite;
+}
+
+.theme-fun {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(111, 66, 193, 0.18), transparent 45%),
+    radial-gradient(circle at 84% 12%, rgba(79, 172, 254, 0.22), transparent 45%),
+    linear-gradient(135deg, #e3ffe7 0%, #d9e7ff 50%, #ffe6fb 100%);
+}
+.theme-fun .news-top-bar { background: #6f42c1; }
+.theme-fun .news-card {
+  border-radius: 26px;
+  box-shadow: 0 14px 30px rgba(111, 66, 193, 0.25);
+  border: 1px solid rgba(111, 66, 193, 0.25);
+}
+.theme-fun .news-card:hover { transform: translateY(-4px) scale(1.03); }
+.theme-fun .news-card { position: relative; overflow: visible; }
+.theme-fun .news-card::before {
+  content: "??";
+  position: absolute;
+  bottom: -10px;
+  right: -6px;
+  font-size: 18px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 3px 6px;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+  animation: sticker-wiggle 4s ease-in-out infinite;
+}
+.theme-fun .comment-btn { background: #6f42c1; }
+.theme-fun .shorts-play { background: #6f42c1; }
+.theme-fun .chat-box { border-color: rgba(111, 66, 193, 0.35); }
+.theme-fun .message.me { background: linear-gradient(135deg, #6f42c1, #4facfe); color: #fff; }
+.theme-fun .message.mumu { background: #bde0fe; }
+.theme-fun .message.bubu { background: #ffc8dd; }
+.theme-fun .message::after {
+  content: "FUN";
+  position: absolute;
+  right: -8px;
+  top: -8px;
+  font-size: 12px;
+  background: #fff;
+  border-radius: 999px;
+  padding: 1px 4px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+  animation: sticker-wiggle 5s ease-in-out infinite;
+}
+.theme-fun .app::before,
+.theme-fun .app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.theme-fun .app::before {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(111, 66, 193, 0.24) 0 20px, transparent 22px),
+    radial-gradient(circle at 80% 14%, rgba(79, 172, 254, 0.24) 0 18px, transparent 20px),
+    radial-gradient(circle at 55% 78%, rgba(255, 200, 221, 0.24) 0 20px, transparent 22px);
+  animation: bubble-pop 14s ease-in-out infinite;
+}
+.theme-fun .app::after {
+  background:
+    conic-gradient(from 0deg at 50% 50%, rgba(111,66,193,0.08), rgba(79,172,254,0.08), rgba(255,200,221,0.08), rgba(111,66,193,0.08));
+  mix-blend-mode: multiply;
+  opacity: 0.35;
+  animation: spin-slow 18s linear infinite;
+}
+.theme-cartoon .app,
+.theme-emoji .app,
+.theme-fun .app {
+  position: relative;
+}
+.theme-cartoon .app > *,
+.theme-emoji .app > *,
+.theme-fun .app > * {
+  position: relative;
+  z-index: 1;
+}
+@keyframes doodle-float {
+  0%, 100% { transform: translateY(0); opacity: 0.9; }
+  50% { transform: translateY(-12px); opacity: 1; }
+}
+@keyframes sparkle-drift {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(-10px) translateX(6px); }
+}
+@keyframes sparkle-twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+@keyframes bubble-pop {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+@keyframes spin-slow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes sticker-pop {
+  0%, 100% { transform: scale(1) rotate(6deg); }
+  50% { transform: scale(1.1) rotate(2deg); }
+}
+@keyframes sticker-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes sticker-wiggle {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(4deg); }
+}
 .dark-mode .news-feed { background: #000; }
 .dark-mode .news-card { background: #1c1c1c; box-shadow: 0 4px 12px rgba(0,0,0,0.5); color: #e0e0e0; }
 .dark-mode .news-card h3, .dark-mode .news-card p { color: #e0e0e0; }
@@ -1525,3 +1925,5 @@ html, body, #root {
   border: 2px solid white;
   border-radius: 50%;
 }
+
+

@@ -32,6 +32,9 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [compressedImageData, setCompressedImageData] = useState<string | null>(null);
+  const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState(0);
+  const [compressionError, setCompressionError] = useState("");
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
@@ -58,6 +61,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const [commentError, setCommentError] = useState("");
   const [roseTheme, setRoseTheme] = useState(false);
   const [teddyTheme, setTeddyTheme] = useState(false);
+  const [valentineWeekTheme, setValentineWeekTheme] = useState(false);
   const unlockClickCountRef = useRef(0);
 
   const API_BASE = (import.meta as any).env?.VITE_API_BASE || "https://mubu-backend-rpx8.onrender.com";
@@ -145,6 +149,14 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
             );
           }
 
+          if (parsed.type === "seen") {
+            setMessages((prev) =>
+              normalizeMessages(
+                prev.map((m) => (m.id === parsed.id ? { ...m, seenBy: parsed.seenBy ?? [] } : m))
+              )
+            );
+          }
+
           if (parsed.type === "delete") {
             setMessages((prev) => normalizeMessages(prev.filter((m) => m.id !== parsed.id)));
           }
@@ -224,6 +236,12 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     };
   }, [chatVisible]);
 
+  useEffect(() => {
+    if (!chatVisible || chatLocked) return;
+    const lastFromOther = [...messages].reverse().find((m) => m.sender !== username);
+    if (lastFromOther?.id) sendSeen(lastFromOther.id);
+  }, [messages, chatVisible, chatLocked, username]);
+
   const scrollChatToBottom = () => {
     if (chatBoxRef.current) {
       chatBoxRef.current.scrollTo({
@@ -292,13 +310,20 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
       reader.readAsDataURL(file);
     });
 
-  const compressImageDataUrl = async (dataUrl: string, maxSize = 1024, targetBytes = 100 * 1024) => {
+  const compressImageDataUrl = async (
+    dataUrl: string,
+    maxSize = 1024,
+    targetBytes = 100 * 1024,
+    onProgress?: (value: number) => void
+  ) => {
+    onProgress?.(10);
     const img = new Image();
     img.src = dataUrl;
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
       img.onerror = () => reject(new Error("image_load_failed"));
     });
+    onProgress?.(30);
 
     const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
     const w = Math.max(1, Math.round(img.width * scale));
@@ -309,23 +334,31 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("canvas_ctx_failed");
     ctx.drawImage(img, 0, 0, w, h);
+    onProgress?.(55);
 
     let quality = 0.75;
     let output = canvas.toDataURL("image/jpeg", quality);
+    let pass = 0;
+    const maxPasses = 5;
     while (output.length > targetBytes * 1.37 && quality > 0.35) {
       quality -= 0.1;
       output = canvas.toDataURL("image/jpeg", quality);
+      pass += 1;
+      const loopProgress = 55 + Math.round((pass / maxPasses) * 40);
+      onProgress?.(Math.min(95, loopProgress));
     }
+    onProgress?.(100);
     return output;
   };
 
-  const compressFileToDataUrl = async (file: File) => {
+  const compressFileToDataUrl = async (file: File, onProgress?: (value: number) => void) => {
     const dataUrl = await readFileAsDataUrl(file);
-    return compressImageDataUrl(dataUrl);
+    return compressImageDataUrl(dataUrl, 1024, 100 * 1024, onProgress);
   };
 
   // ---------- Handle send with queue ----------
   const handleSend = async () => {
+    if (isCompressingImage) return;
     if (!newMessage.trim() && !imageFile && !compressedImageData) return;
     const tempId = crypto.randomUUID();
 
@@ -342,6 +375,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
           : Date.now(),
         replyTo: replyTo ?? null,
         likedBy: [],
+        seenBy: [],
         localStatus: "pending",
       };
 
@@ -390,10 +424,28 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     };
 
     if (imageFile || compressedImageData) {
-      const imgData = imageFile
-        ? (compressedImageData ?? (await compressFileToDataUrl(imageFile)))
-        : compressedImageData;
-      doSend(imgData);
+      let imgData = compressedImageData;
+      if (imageFile && !imgData) {
+        try {
+          setCompressionError("");
+          setIsCompressingImage(true);
+          setCompressionProgress(5);
+          imgData = await compressFileToDataUrl(imageFile, (value) => setCompressionProgress(value));
+          setCompressedImageData(imgData);
+        } catch {
+          try {
+            imgData = await readFileAsDataUrl(imageFile);
+            setCompressionError("Compression failed. Sent original image.");
+          } catch {
+            setCompressionError("Unable to read selected image.");
+            return;
+          }
+        } finally {
+          setIsCompressingImage(false);
+          setCompressionProgress(0);
+        }
+      }
+      doSend(imgData ?? null);
     } else doSend(null);
   };
 
@@ -404,7 +456,10 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     }
     setImageFile(file);
     setShowMediaMenu(false);
-    compressFileToDataUrl(file)
+    setCompressionError("");
+    setIsCompressingImage(true);
+    setCompressionProgress(5);
+    compressFileToDataUrl(file, (value) => setCompressionProgress(value))
       .then((dataUrl) => {
         setCompressedImageData(dataUrl);
         setPreviewUrl(dataUrl);
@@ -413,6 +468,11 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
         const fallback = URL.createObjectURL(file);
         setCompressedImageData(null);
         setPreviewUrl(fallback);
+        setCompressionError("Compression failed. Will send original image.");
+      })
+      .finally(() => {
+        setIsCompressingImage(false);
+        setCompressionProgress(0);
       });
   };
 
@@ -456,6 +516,16 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
     if (ws.current?.readyState === WebSocket.OPEN && now - lastTypingRef.current > 1500) {
       ws.current.send(JSON.stringify({ type: "typing", sender: username }));
       lastTypingRef.current = now;
+    }
+  };
+
+  const sendSeen = (messageId?: string | null) => {
+    if (!messageId) return;
+    const payload = { type: "seen", id: messageId, username };
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify(payload));
+    } else {
+      messageQueue.current.push(payload);
     }
   };
 
@@ -613,7 +683,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
           {chatVisible && (
             <div
               ref={chatContainerRef}
-              className={`chat-container valentine-chat ${roseTheme ? "rose-chat" : ""} ${teddyTheme ? "teddy-chat" : ""}`}
+              className={`chat-container valentine-chat ${roseTheme ? "rose-chat" : ""} ${teddyTheme ? "teddy-chat" : ""} ${valentineWeekTheme ? "valentine-week-chat" : ""}`}
             >
               <button
                 className="chat-toggle-btn"
@@ -667,22 +737,36 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                       onClick={() => {
                         setRoseTheme((prev) => !prev);
                         setTeddyTheme(false);
+                        setValentineWeekTheme(false);
                       }}
                       title="Toggle Rose Theme"
                       aria-label="Toggle Rose Theme"
                     >
-                      🌹
+                      {"\uD83C\uDF39"}
+                    </button>
+                    <button
+                      className={`chat-theme-toggle week ${valentineWeekTheme ? "active" : ""}`}
+                      onClick={() => {
+                        setValentineWeekTheme((prev) => !prev);
+                        setRoseTheme(false);
+                        setTeddyTheme(false);
+                      }}
+                      title="Toggle Valentines Week Theme"
+                      aria-label="Toggle Valentines Week Theme"
+                    >
+                      V
                     </button>
                     <button
                       className={`chat-theme-toggle teddy ${teddyTheme ? "active" : ""}`}
                       onClick={() => {
                         setTeddyTheme((prev) => !prev);
                         setRoseTheme(false);
+                        setValentineWeekTheme(false);
                       }}
                       title="Toggle Teddy Theme"
                       aria-label="Toggle Teddy Theme"
                     >
-                      🧸
+                      {"\uD83E\uDDF8"}
                     </button>
                   </div>
                   {roseTheme && (
@@ -709,6 +793,13 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                     {messages.map((msg) => {
                       const isMe = msg.sender === username;
                       const senderInitial = msg.sender?.[0]?.toUpperCase() ?? "?";
+                      const delivered =
+                        isMe &&
+                        (msg as any).localStatus !== "pending" &&
+                        (msg as any).localStatus !== "failed";
+                      const seen =
+                        delivered &&
+                        (msg.seenBy?.some((u) => u === "mumu" || u === "bubu") ?? false);
                       if (!shouldRenderMessage(msg)) return null;
                       const messageShortsId = extractShortsId(msg.text);
                       const messageReelId = extractReelId(msg.text);
@@ -825,6 +916,9 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                                     not sent
                                   </button>
                                 )}
+                                {delivered && (
+                                  <span className={`message-ticks ${seen ? "seen" : ""}`}>✓✓</span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -844,6 +938,10 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 
                   <div className="input-area">
                     <div className="input-box" onClick={() => setShowMediaMenu(false)}>
+                      {isCompressingImage && (
+                        <div className="message-status">Compressing image... {compressionProgress}%</div>
+                      )}
+                      {compressionError && <div className="message-status failed">{compressionError}</div>}
                       {previewUrl && (
                         <div className="image-preview">
                           <img src={previewUrl} alt="preview" />
@@ -882,7 +980,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                             <div className="media-item" onClick={openGallery}>🖼️ Gallery</div>
                           </div>
                         )}
-                        <button className="send-btn" onClick={handleSend} title="Send">🚀</button>
+                        <button className="send-btn" onClick={handleSend} title="Send" disabled={isCompressingImage}>🚀</button>
                       </div>
                     </div>
 
@@ -945,4 +1043,6 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 }
 
 export default NewsDetail;
+
+
 

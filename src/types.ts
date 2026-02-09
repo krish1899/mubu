@@ -11,4 +11,5 @@ export interface Message {
   createdAt: number;
   replyTo?: ReplyInfo | null;
   likedBy?: string[];
+  seenBy?: string[];
 }

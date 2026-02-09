@@ -12,6 +12,7 @@ function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [darkMode, setDarkMode] = useState(false);
+  const [theme, setTheme] = useState<"default" | "cartoon" | "emoji" | "fun">("default");
 
   const [sessionNews, setSessionNews] = useState<typeof NEWS_DATA>([]);
   const [imageSeeds, setImageSeeds] = useState<number[]>([]);
@@ -47,7 +48,7 @@ function App() {
 
   return (
     <Router>
-      <div className={darkMode ? "app dark-mode" : "app"}>
+      <div className={`app ${darkMode ? "dark-mode" : ""} theme-${theme}`}>
         <Routes>
           <Route path="/news" element={<Navigate to="/" replace />} />
           <Route
@@ -59,6 +60,8 @@ function App() {
                 setAuthenticated={setAuthenticated}
                 darkMode={darkMode}
                 setDarkMode={setDarkMode}
+                theme={theme}
+                setTheme={setTheme}
                 getNewsImage={getNewsImage}
               />
             }

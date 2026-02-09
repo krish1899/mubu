@@ -111,6 +111,8 @@ async function sendLastMessages(ws) {
           if (parsed?.id) {
             const likedBy = await redis.smembers(`likes:${parsed.id}`);
             parsed.likedBy = Array.isArray(likedBy) ? likedBy : [];
+            const seenBy = await redis.smembers(`seen:${parsed.id}`);
+            parsed.seenBy = Array.isArray(seenBy) ? seenBy : [];
           }
           ws.send(JSON.stringify(parsed));
         } catch (err) {
@@ -207,6 +209,7 @@ wss.on("connection", async (ws) => {
               await redis.ltrim(MESSAGE_LIST, -500, -1);
             }
             await redis.del(`likes:${parsed.id}`);
+            await redis.del(`seen:${parsed.id}`);
             broadcast(JSON.stringify({ type: "delete", id: parsed.id }));
           }
         } catch (err) {
@@ -241,6 +244,26 @@ wss.on("connection", async (ws) => {
         return;
       }
 
+      // Seen message
+      if (parsed.type === "seen") {
+        if (!parsed.id || !parsed.username) return;
+        try {
+          const seenKey = `seen:${parsed.id}`;
+          await redis.sadd(seenKey, parsed.username);
+          const seenBy = await redis.smembers(seenKey);
+          broadcast(
+            JSON.stringify({
+              type: "seen",
+              id: parsed.id,
+              seenBy: Array.isArray(seenBy) ? seenBy : [],
+            })
+          );
+        } catch (err) {
+          console.error("âŒ Failed to set seen:", err);
+        }
+        return;
+      }
+
       // Chat message
       if (parsed.type === "message") {
         const msgObj = {
@@ -252,6 +275,7 @@ wss.on("connection", async (ws) => {
           createdAt: parsed.createdAt || Date.now(),
           replyTo: parsed.replyTo ?? null,
           likedBy: Array.isArray(parsed.likedBy) ? parsed.likedBy : [],
+          seenBy: Array.isArray(parsed.seenBy) ? parsed.seenBy : [],
         };
 
         const msgString = JSON.stringify(msgObj);
