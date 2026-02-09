@@ -472,6 +472,9 @@ html, body, #root {
 }
 .chat-theme-toggle.week:hover { background: #b91d50; }
 .chat-theme-toggle.week.active { box-shadow: 0 0 0 2px rgba(215, 38, 95, 0.4); }
+.chat-theme-toggle.chocolate { background: #8b5a2b; }
+.chat-theme-toggle.chocolate:hover { background: #6f4520; }
+.chat-theme-toggle.chocolate.active { box-shadow: 0 0 0 2px rgba(139, 90, 43, 0.45); }
 .chat-theme-toggle.teddy { background: #c47a3a; }
 .chat-theme-toggle.teddy:hover { background: #ab652f; }
 .chat-theme-toggle.teddy.active { box-shadow: 0 0 0 2px rgba(196, 122, 58, 0.45); }
@@ -483,38 +486,38 @@ html, body, #root {
   .chat-theme-toggle { width: 28px; height: 28px; font-size: 15px; }
 }
 
-/* Rose day theme */
-.rose-chat {
+/* Chocolate day theme */
+.chocolate-chat {
   background:
-    radial-gradient(circle at 12% 8%, rgba(255, 214, 231, 0.7), transparent 45%),
-    radial-gradient(circle at 88% 18%, rgba(255, 199, 220, 0.6), transparent 40%),
-    linear-gradient(135deg, #ffe9f2 0%, #fff7fa 55%, #ffe6ef 100%);
-  box-shadow: 0 10px 30px rgba(236, 72, 153, 0.22);
+    radial-gradient(circle at 12% 8%, rgba(232, 204, 171, 0.6), transparent 45%),
+    radial-gradient(circle at 88% 18%, rgba(208, 169, 125, 0.5), transparent 40%),
+    linear-gradient(135deg, #f5e7d7 0%, #fff9f2 55%, #e8d1b5 100%);
+  box-shadow: 0 10px 30px rgba(121, 85, 52, 0.22);
 }
-.rose-chat .chat-box {
-  background: #fff4f8;
-  border-color: #f3b7cf;
+.chocolate-chat .chat-box {
+  background: #fff6eb;
+  border-color: #dfc5ab;
 }
-.rose-chat .message.me {
-  background: linear-gradient(135deg, #ff5b98, #ff89b7);
+.chocolate-chat .message.me {
+  background: linear-gradient(135deg, #8b5a2b, #b77b44);
   color: #fff;
-  box-shadow: 0 6px 14px rgba(255, 91, 152, 0.25);
+  box-shadow: 0 6px 14px rgba(139, 90, 43, 0.25);
 }
-.rose-chat .message.mumu { background: #ffd9e6; color: #4a2536; }
-.rose-chat .message.bubu { background: #ffd0e0; color: #4a2536; }
-.rose-chat .replying-bar { background: rgba(255, 77, 143, 0.12); }
-.rose-chat .input-box { background: #fff8fb; border-color: #f3b7cf; }
-.rose-chat .camera-btn,
-.rose-chat .send-btn { background: #ff4d8f; }
-.rose-chat .camera-btn:hover,
-.rose-chat .send-btn:hover { background: #e63b7e; }
-.rose-chat .shorts-thumb { color: #ff4d8f; }
-.rose-chat .shorts-play { background: #ff4d8f; }
-.rose-chat .chat-toggle-btn { background-color: #ff4d8f; }
-.rose-chat .chat-theme-toggle { background: #ff4d8f; }
-.rose-chat .chat-theme-toggle:hover { background: #e63b7e; }
-.rose-chat .chat-lock-input button { background: #ff4d8f; }
-.rose-chat .chat-lock-error { color: #ff7aa8; }
+.chocolate-chat .message.mumu { background: #ead7c1; color: #4b311c; }
+.chocolate-chat .message.bubu { background: #e3c9ac; color: #4b311c; }
+.chocolate-chat .replying-bar { background: rgba(139, 90, 43, 0.14); }
+.chocolate-chat .input-box { background: #fff8ef; border-color: #dfc5ab; }
+.chocolate-chat .camera-btn,
+.chocolate-chat .send-btn { background: #8b5a2b; }
+.chocolate-chat .camera-btn:hover,
+.chocolate-chat .send-btn:hover { background: #6f4520; }
+.chocolate-chat .shorts-thumb { color: #8b5a2b; }
+.chocolate-chat .shorts-play { background: #8b5a2b; }
+.chocolate-chat .chat-toggle-btn { background-color: #8b5a2b; }
+.chocolate-chat .chat-theme-toggle { background: #8b5a2b; }
+.chocolate-chat .chat-theme-toggle:hover { background: #6f4520; }
+.chocolate-chat .chat-lock-input button { background: #8b5a2b; }
+.chocolate-chat .chat-lock-error { color: #b77b44; }
 
 /* Teddy theme */
 .teddy-chat {
@@ -548,23 +551,25 @@ html, body, #root {
 .dark-mode .chat-theme-toggle:hover { background: #e63b7e; }
 .dark-mode .chat-theme-toggle.week { background: #d7265f; }
 .dark-mode .chat-theme-toggle.week:hover { background: #b91d50; }
-.dark-mode .rose-chat { background: #1a0f14; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-.dark-mode .rose-chat .chat-box { background: #1f1218; border-color: #3b1b2a; }
-.dark-mode .rose-chat .message.me { background: #ff4d8f; color: #fff; }
-.dark-mode .rose-chat .message.mumu,
-.dark-mode .rose-chat .message.bubu { background: #3a1a28; color: #ffdbe7; }
-.dark-mode .rose-chat .replying-bar { background: rgba(255, 77, 143, 0.12); }
-.dark-mode .rose-chat .input-box { background: #1a0f14; border-color: #3b1b2a; }
-.dark-mode .rose-chat .camera-btn,
-.dark-mode .rose-chat .send-btn { background: #ff4d8f; }
-.dark-mode .rose-chat .camera-btn:hover,
-.dark-mode .rose-chat .send-btn:hover { background: #e63b7e; }
-.dark-mode .rose-chat .shorts-thumb { color: #ff9fc0; }
-.dark-mode .rose-chat .shorts-play { background: #ff4d8f; }
-.dark-mode .rose-chat .chat-toggle-btn { background-color: #ff4d8f; }
-.dark-mode .rose-chat .chat-theme-toggle { background: #ff4d8f; }
-.dark-mode .rose-chat .chat-theme-toggle:hover { background: #e63b7e; }
-.dark-mode .rose-chat .chat-lock-input button { background: #ff4d8f; }
+.dark-mode .chat-theme-toggle.chocolate { background: #7d4c23; }
+.dark-mode .chat-theme-toggle.chocolate:hover { background: #5d3819; }
+.dark-mode .chocolate-chat { background: #17110c; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+.dark-mode .chocolate-chat .chat-box { background: #22170f; border-color: #3f2c1f; }
+.dark-mode .chocolate-chat .message.me { background: #8b5a2b; color: #fff; }
+.dark-mode .chocolate-chat .message.mumu,
+.dark-mode .chocolate-chat .message.bubu { background: #3a291d; color: #f2ddc7; }
+.dark-mode .chocolate-chat .replying-bar { background: rgba(139, 90, 43, 0.18); }
+.dark-mode .chocolate-chat .input-box { background: #1a120c; border-color: #3f2c1f; }
+.dark-mode .chocolate-chat .camera-btn,
+.dark-mode .chocolate-chat .send-btn { background: #8b5a2b; }
+.dark-mode .chocolate-chat .camera-btn:hover,
+.dark-mode .chocolate-chat .send-btn:hover { background: #6f4520; }
+.dark-mode .chocolate-chat .shorts-thumb { color: #d6a978; }
+.dark-mode .chocolate-chat .shorts-play { background: #8b5a2b; }
+.dark-mode .chocolate-chat .chat-toggle-btn { background-color: #8b5a2b; }
+.dark-mode .chocolate-chat .chat-theme-toggle { background: #8b5a2b; }
+.dark-mode .chocolate-chat .chat-theme-toggle:hover { background: #6f4520; }
+.dark-mode .chocolate-chat .chat-lock-input button { background: #8b5a2b; }
 
 /* Valentines week image theme (inside small chat box only) */
 .valentine-week-chat {
@@ -591,6 +596,9 @@ html, body, #root {
   border-color: rgba(255, 255, 255, 0.55);
 }
 .valentine-week-chat .chat-theme-toggle.teddy {
+  background: linear-gradient(135deg, #ff9ac9, #ff63a2);
+}
+.valentine-week-chat .chat-theme-toggle.chocolate {
   background: linear-gradient(135deg, #ff9ac9, #ff63a2);
 }
 .valentine-week-chat .chat-theme-toggle.week {
@@ -624,28 +632,35 @@ html, body, #root {
   color: #fff;
 }
 
-.rose-petals {
+.choco-floats {
   position: absolute;
   inset: 0;
   pointer-events: none;
   overflow: hidden;
 }
-.rose-petal {
+.choco-float {
   position: absolute;
-  width: 14px;
-  height: 10px;
-  background: radial-gradient(circle at 30% 30%, #ffe7f1 0%, #ff9bc1 55%, #ff5b98 100%);
-  border-radius: 10px 10px 10px 0;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, #6f4520 0%, #a66a38 55%, #c38a53 100%);
+  border-radius: 3px;
   opacity: 0.8;
-  animation: rose-float 6s linear infinite;
+  animation: choco-float 6s linear infinite;
 }
-.rose-petal.p1 { left: 10%; top: -10px; animation-delay: 0s; }
-.rose-petal.p2 { left: 35%; top: -14px; animation-delay: 1.2s; }
-.rose-petal.p3 { left: 60%; top: -12px; animation-delay: 2.4s; }
-.rose-petal.p4 { left: 80%; top: -16px; animation-delay: 3.6s; }
-.rose-petal.p5 { left: 50%; top: -18px; animation-delay: 4.8s; }
+.choco-float::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 2px;
+}
+.choco-float.c1 { left: 10%; top: -10px; animation-delay: 0s; }
+.choco-float.c2 { left: 35%; top: -14px; animation-delay: 1.2s; }
+.choco-float.c3 { left: 60%; top: -12px; animation-delay: 2.4s; }
+.choco-float.c4 { left: 80%; top: -16px; animation-delay: 3.6s; }
+.choco-float.c5 { left: 50%; top: -18px; animation-delay: 4.8s; }
 
-@keyframes rose-float {
+@keyframes choco-float {
   0% { transform: translateY(-10px) rotate(0deg); opacity: 0; }
   10% { opacity: 0.8; }
   100% { transform: translateY(360px) rotate(180deg); opacity: 0; }

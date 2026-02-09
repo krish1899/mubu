@@ -59,7 +59,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentLoading, setCommentLoading] = useState(false);
   const [commentError, setCommentError] = useState("");
-  const [roseTheme, setRoseTheme] = useState(false);
+  const [chocolateTheme, setChocolateTheme] = useState(false);
   const [teddyTheme, setTeddyTheme] = useState(false);
   const [valentineWeekTheme, setValentineWeekTheme] = useState(false);
   const unlockClickCountRef = useRef(0);
@@ -215,6 +215,8 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
           behavior: "smooth",
         });
       }
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      screenEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, 50);
     return () => clearTimeout(timer);
   }, [messages, chatVisible, chatLocked]);
@@ -690,7 +692,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
           {chatVisible && (
             <div
               ref={chatContainerRef}
-              className={`chat-container valentine-chat ${roseTheme ? "rose-chat" : ""} ${teddyTheme ? "teddy-chat" : ""} ${valentineWeekTheme ? "valentine-week-chat" : ""}`}
+              className={`chat-container valentine-chat ${chocolateTheme ? "chocolate-chat" : ""} ${teddyTheme ? "teddy-chat" : ""} ${valentineWeekTheme ? "valentine-week-chat" : ""}`}
             >
               <button
                 className="chat-toggle-btn"
@@ -740,22 +742,22 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                 <>
                   <div className="chat-theme-wrap">
                     <button
-                      className={`chat-theme-toggle ${roseTheme ? "active" : ""}`}
+                      className={`chat-theme-toggle chocolate ${chocolateTheme ? "active" : ""}`}
                       onClick={() => {
-                        setRoseTheme((prev) => !prev);
+                        setChocolateTheme((prev) => !prev);
                         setTeddyTheme(false);
                         setValentineWeekTheme(false);
                       }}
-                      title="Toggle Rose Theme"
-                      aria-label="Toggle Rose Theme"
+                      title="Toggle Chocolate Day Theme"
+                      aria-label="Toggle Chocolate Day Theme"
                     >
-                      {"\uD83C\uDF39"}
+                      {"\uD83C\uDF6B"}
                     </button>
                     <button
                       className={`chat-theme-toggle week ${valentineWeekTheme ? "active" : ""}`}
                       onClick={() => {
                         setValentineWeekTheme((prev) => !prev);
-                        setRoseTheme(false);
+                        setChocolateTheme(false);
                         setTeddyTheme(false);
                       }}
                       title="Toggle Valentines Week Theme"
@@ -767,7 +769,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                       className={`chat-theme-toggle teddy ${teddyTheme ? "active" : ""}`}
                       onClick={() => {
                         setTeddyTheme((prev) => !prev);
-                        setRoseTheme(false);
+                        setChocolateTheme(false);
                         setValentineWeekTheme(false);
                       }}
                       title="Toggle Teddy Theme"
@@ -776,13 +778,13 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
                       {"\uD83E\uDDF8"}
                     </button>
                   </div>
-                  {roseTheme && (
-                    <div className="rose-petals" aria-hidden="true">
-                      <span className="rose-petal p1" />
-                      <span className="rose-petal p2" />
-                      <span className="rose-petal p3" />
-                      <span className="rose-petal p4" />
-                      <span className="rose-petal p5" />
+                  {chocolateTheme && (
+                    <div className="choco-floats" aria-hidden="true">
+                      <span className="choco-float c1" />
+                      <span className="choco-float c2" />
+                      <span className="choco-float c3" />
+                      <span className="choco-float c4" />
+                      <span className="choco-float c5" />
                     </div>
                   )}
                   {teddyTheme && (
