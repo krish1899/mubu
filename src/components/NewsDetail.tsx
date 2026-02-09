@@ -44,6 +44,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const chatBoxRef = useRef<HTMLDivElement | null>(null);
+  const newsDetailRef = useRef<HTMLDivElement | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const fileInputCameraRef = useRef<HTMLInputElement | null>(null);
   const fileInputGalleryRef = useRef<HTMLInputElement | null>(null);
@@ -73,6 +74,45 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   const pendingTimeouts = useRef<Record<string, number>>({});
   const lastMessageIdRef = useRef<string | null>(null);
   // NEW: auto-reconnect timer
+
+  const scrollToLatest = (behavior: ScrollBehavior = "smooth") => {
+    const chatBox = chatBoxRef.current;
+    if (chatBox) {
+      chatBox.scrollTo({
+        top: chatBox.scrollHeight,
+        behavior,
+      });
+    }
+
+    const detailScroller = newsDetailRef.current;
+    if (detailScroller) {
+      detailScroller.scrollTo({
+        top: detailScroller.scrollHeight,
+        behavior,
+      });
+    }
+
+    const appScroller = detailScroller?.closest(".app") as HTMLElement | null;
+    if (appScroller) {
+      appScroller.scrollTo({
+        top: appScroller.scrollHeight,
+        behavior,
+      });
+    }
+
+    if (typeof document !== "undefined") {
+      const pageScroller = document.scrollingElement as HTMLElement | null;
+      if (pageScroller) {
+        pageScroller.scrollTo({
+          top: pageScroller.scrollHeight,
+          behavior,
+        });
+      }
+    }
+
+    chatEndRef.current?.scrollIntoView({ behavior, block: "end" });
+    screenEndRef.current?.scrollIntoView({ behavior, block: "end" });
+  };
 
   useEffect(() => {
     let wsAlive = true; // flag to avoid multiple connects
@@ -209,14 +249,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
 
     if (!isNewMessage || !chatVisible || chatLocked) return;
     const timer = setTimeout(() => {
-      if (chatBoxRef.current) {
-        chatBoxRef.current.scrollTo({
-          top: chatBoxRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      }
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-      screenEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      scrollToLatest("smooth");
     }, 50);
     return () => clearTimeout(timer);
   }, [messages, chatVisible, chatLocked]);
@@ -224,20 +257,10 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   useEffect(() => {
     if (!chatVisible) return;
     const raf = requestAnimationFrame(() => {
-      if (chatBoxRef.current) {
-        chatBoxRef.current.scrollTo({
-          top: chatBoxRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      }
+      scrollToLatest("smooth");
     });
     const timer = setTimeout(() => {
-      if (chatBoxRef.current) {
-        chatBoxRef.current.scrollTo({
-          top: chatBoxRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      }
+      scrollToLatest("smooth");
     }, 150);
     return () => {
       cancelAnimationFrame(raf);
@@ -252,12 +275,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   }, [messages, chatVisible, chatLocked, username]);
 
   const scrollChatToBottom = () => {
-    if (chatBoxRef.current) {
-      chatBoxRef.current.scrollTo({
-        top: chatBoxRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    }
+    scrollToLatest("smooth");
   };
 
   if (!sessionNews[idx]) return <p>Invalid news item.</p>;
@@ -618,7 +636,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   };
 
   return (
-    <div className="news-detail">
+    <div className="news-detail" ref={newsDetailRef}>
       <button className="back-btn" onClick={() => navigate(-1)}>← Back</button>
       <img src={getNewsImage(imageSeeds[idx])} alt="news" className="news-detail-image" />
       <h2>{sessionNews[idx].title}</h2>
