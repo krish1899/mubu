@@ -281,7 +281,7 @@ function NewsDetail({ sessionNews, imageSeeds, username, getNewsImage }: NewsDet
   };
 
   const normalizeMessages = (list: Message[]) =>
-    [...list].sort((a, b) => a.createdAt - b.createdAt).slice(-10);
+    [...list].sort((a, b) => a.createdAt - b.createdAt).slice(-20);
 
   const scheduleFail = (id: string) => {
     clearFailTimer(id);
